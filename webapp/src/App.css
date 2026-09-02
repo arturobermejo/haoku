@@ -1,0 +1,9 @@
+.app {
+  height: 100%;
+  display: grid;
+  grid-template-rows: var(--topbar-height) minmax(0, 1fr);
+}
+
+.app-restoring {
+  height: 100%;
+}
