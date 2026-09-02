@@ -8,6 +8,7 @@ import { resolveScale, WORKSPACE_GUTTER, type ZoomMode } from '../pdf/zoom'
 import { CardsAndThreads } from './CardsAndThreads'
 import { DocumentColumn } from './DocumentColumn'
 import { SelectionToolbar } from './SelectionToolbar'
+import { ToolsBridge } from '../tools/ToolsBridge'
 import { WorkspaceContext, type Halo, type SheetFrame, type WorkspaceApi } from './workspaceContext'
 import './Workspace.css'
 
@@ -28,7 +29,16 @@ export function Workspace({ doc, zoom, onEffectiveScale, onCurrentPageChange }: 
   const rootRef = useRef<HTMLDivElement>(null)
   const innerRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState(0)
+  const [currentPage, setCurrentPage] = useState(1)
   const aug = useAugmentations()
+
+  const handleCurrentPage = useCallback(
+    (page: number) => {
+      setCurrentPage(page)
+      onCurrentPageChange(page)
+    },
+    [onCurrentPageChange],
+  )
 
   useLayoutEffect(() => {
     const root = rootRef.current
@@ -168,18 +178,25 @@ export function Workspace({ doc, zoom, onEffectiveScale, onCurrentPageChange }: 
       window.clearTimeout(haloTimer.current)
       haloTimer.current = window.setTimeout(() => setHalo(null), HALO_MS)
     }
-    return { scale, frames, bandsByPage, pageDims, pageToInner, innerToPage, jumpTo, halo, reportRewriteHeight }
-  }, [scale, frames, bandsByPage, doc, halo, reportRewriteHeight])
+    const scrollToPage = (page: number, y: number) => {
+      const root = rootRef.current
+      if (!root) return
+      const point = pageToInner(page, 0, y)
+      root.scrollTo({ top: Math.max(0, point.y - 40), behavior: 'smooth' })
+    }
+    return { scale, currentPage, frames, bandsByPage, pageDims, pageToInner, innerToPage, jumpTo, scrollToPage, halo, reportRewriteHeight }
+  }, [scale, currentPage, frames, bandsByPage, doc, halo, reportRewriteHeight])
 
   return (
     <WorkspaceContext.Provider value={api}>
       <div ref={rootRef} className="workspace canvas-grid scroll" onScroll={onScroll} onClick={() => aug.select(null)}>
         <div ref={innerRef} className="workspace-inner" style={{ width: innerWidth }}>
-          <DocumentColumn doc={doc} scale={scale} scrollRootRef={rootRef} onCurrentPageChange={onCurrentPageChange} />
+          <DocumentColumn doc={doc} scale={scale} scrollRootRef={rootRef} onCurrentPageChange={handleCurrentPage} />
           <CardsAndThreads />
         </div>
       </div>
       <SelectionToolbar />
+      <ToolsBridge doc={doc} />
     </WorkspaceContext.Provider>
   )
 }

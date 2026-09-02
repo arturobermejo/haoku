@@ -1,0 +1,128 @@
+/**
+ * Registers the catalog on whichever WebMCP API the browser carries, and keeps
+ * a direct bridge so the same tools can be driven without browser support.
+ */
+import { runTool, TOOLS, type ToolContext, type ToolResult } from './catalog'
+
+interface ModelContextTool {
+  name: string
+  title?: string
+  description: string
+  inputSchema?: object
+  annotations?: { readOnlyHint?: boolean; untrustedContentHint?: boolean }
+  execute: (input: object, options: { signal?: AbortSignal }) => Promise<unknown>
+}
+
+interface ModelContext {
+  registerTool(tool: ModelContextTool, options?: { signal?: AbortSignal }): Promise<void>
+  getTools?(): Promise<ModelContextTool[]>
+  executeTool?(tool: ModelContextTool, input?: object): Promise<string>
+}
+
+declare global {
+  interface Document {
+    modelContext?: ModelContext
+  }
+  interface Navigator {
+    modelContext?: ModelContext
+  }
+  interface Window {
+    saoku?: SaokuBridge
+  }
+}
+
+export interface WebMcpStatus {
+  supported: boolean
+  api: string | null
+  registered: number
+  failed: { name: string; reason: string }[]
+  error: string | null
+}
+
+export interface SaokuBridge {
+  tools: {
+    list: () => Omit<ModelContextTool, 'execute'>[]
+    call: (name: string, input?: unknown) => Promise<ToolResult>
+    register: () => Promise<WebMcpStatus>
+    unregister: () => WebMcpStatus
+    status: () => WebMcpStatus
+  }
+}
+
+let status: WebMcpStatus = { supported: false, api: null, registered: 0, failed: [], error: null }
+let controller: AbortController | null = null
+let currentContext: ToolContext | null = null
+const listeners = new Set<() => void>()
+
+function publish(next: WebMcpStatus) {
+  status = next
+  listeners.forEach((l) => l())
+}
+
+export function subscribeStatus(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
+
+export function getStatus(): WebMcpStatus {
+  return status
+}
+
+/** The tools read the reader through this; it is swapped as the document or state changes. */
+export function setToolContext(ctx: ToolContext | null) {
+  currentContext = ctx
+}
+
+function detect(): { mc: ModelContext; api: string } | null {
+  if (typeof document.modelContext?.registerTool === 'function') return { mc: document.modelContext, api: 'document.modelContext' }
+  if (typeof navigator.modelContext?.registerTool === 'function') return { mc: navigator.modelContext, api: 'navigator.modelContext (deprecated)' }
+  return null
+}
+
+export async function register(): Promise<WebMcpStatus> {
+  if (controller) return status
+  const ctx = detect()
+  if (!ctx) {
+    publish({ supported: false, api: null, registered: 0, failed: [], error: !window.isSecureContext ? 'WebMCP needs a secure context: HTTPS or localhost.' : 'This browser does not carry the WebMCP API.' })
+    return status
+  }
+  controller = new AbortController()
+  const next: WebMcpStatus = { supported: true, api: ctx.api, registered: 0, failed: [], error: null }
+  for (const tool of TOOLS) {
+    try {
+      await ctx.mc.registerTool(
+        {
+          name: tool.name,
+          title: tool.title,
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+          annotations: tool.annotations ?? {},
+          execute: (input) => runTool(tool.name, input, currentContext),
+        },
+        { signal: controller.signal },
+      )
+      next.registered++
+    } catch (err: unknown) {
+      next.failed.push({ name: tool.name, reason: err instanceof Error ? err.message : String(err) })
+    }
+  }
+  publish(next)
+  return status
+}
+
+export function unregister(): WebMcpStatus {
+  controller?.abort()
+  controller = null
+  publish({ ...status, registered: 0 })
+  return status
+}
+
+export const bridge: SaokuBridge = {
+  tools: {
+    list: () => TOOLS.map(({ name, title, description, inputSchema, annotations }) => ({ name, title, description, inputSchema, annotations })),
+    call: (name, input) => runTool(name, input, currentContext),
+    register,
+    unregister,
+    status: getStatus,
+  },
+}

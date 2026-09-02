@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, type ReactNode } from 'react'
 import { loadAugmentations, saveAugmentations } from '../storage/augmentations'
 import { hasCard, type Anchor, type Augmentation, type DiagramNode, type NewAugmentation, type Placement } from './types'
 import { newId } from './ids'
@@ -19,6 +19,9 @@ type Action =
   | { type: 'remove'; id: string }
   | { type: 'place'; id: string; placement: Placement }
   | { type: 'toggleFold'; id: string }
+  | { type: 'setFolded'; id: string; folded: boolean }
+  | { type: 'setCollapsed'; id: string; collapsed: boolean }
+  | { type: 'setShowRewrite'; id: string; showRewrite: boolean }
   | { type: 'select'; id: string | null }
   | { type: 'flipRewrite'; id: string }
   | { type: 'toggleCollapse'; id: string }
@@ -59,6 +62,12 @@ function reducer(state: State, action: Action): State {
         selectedId: folded ? (state.selectedId === action.id ? null : state.selectedId) : action.id,
       }
     }
+    case 'setFolded':
+      return { ...state, items: patch(state.items, action.id, (i) => ({ ...i, folded: action.folded })), selectedId: action.folded && state.selectedId === action.id ? null : state.selectedId }
+    case 'setCollapsed':
+      return { ...state, items: patch(state.items, action.id, (i) => (i.type === 'fold' ? { ...i, collapsed: action.collapsed } : i)) }
+    case 'setShowRewrite':
+      return { ...state, items: patch(state.items, action.id, (i) => (i.type === 'rewrite' ? { ...i, showRewrite: action.showRewrite } : i)) }
     case 'select':
       return { ...state, selectedId: action.id }
     case 'flipRewrite':
@@ -80,6 +89,9 @@ export interface AugmentationsApi extends State {
   remove: (id: string) => void
   place: (id: string, placement: Placement) => void
   toggleFold: (id: string) => void
+  setFolded: (id: string, folded: boolean) => void
+  setCollapsed: (id: string, collapsed: boolean) => void
+  setShowRewrite: (id: string, showRewrite: boolean) => void
   select: (id: string | null) => void
   flipRewrite: (id: string) => void
   toggleCollapse: (id: string) => void
@@ -89,6 +101,11 @@ export interface AugmentationsApi extends State {
   /** Adds a citation to the active draft: an anchor for a note, a chained node for a diagram. */
   cite: (anchor: Anchor) => boolean
   byId: (id: string) => Augmentation | undefined
+  /**
+   * The state as of the last dispatch, ahead of React's render. Tools that
+   * chain several calls in one tick read this so they never act on a snapshot.
+   */
+  getState: () => State
   shownCount: number
   inTextCount: number
 }
@@ -98,7 +115,16 @@ const Context = createContext<AugmentationsApi | null>(null)
 const SAVE_DELAY = 300
 
 export function AugmentationsProvider({ fingerprint, children }: { fingerprint: string; children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, initial)
+  const [state, reactDispatch] = useReducer(reducer, initial)
+  // The reducer is pure, so applying it eagerly here keeps a synchronous view of the latest state.
+  const latest = useRef(state)
+  const dispatch = useCallback((action: Action) => {
+    latest.current = reducer(latest.current, action)
+    reactDispatch(action)
+  }, [])
+  useEffect(() => {
+    latest.current = state
+  }, [state])
 
   useEffect(() => {
     let cancelled = false
@@ -113,7 +139,7 @@ export function AugmentationsProvider({ fingerprint, children }: { fingerprint: 
     return () => {
       cancelled = true
     }
-  }, [fingerprint])
+  }, [fingerprint, dispatch])
 
   useEffect(() => {
     if (!state.loaded) return
@@ -127,7 +153,7 @@ export function AugmentationsProvider({ fingerprint, children }: { fingerprint: 
     const item = { id: newId(), createdAt: Date.now(), folded: false, ...partial } as Augmentation
     dispatch({ type: 'add', item })
     return item
-  }, [])
+  }, [dispatch])
 
   const { draftId, items } = state
   const cite = useCallback((anchor: Anchor): boolean => {
@@ -151,7 +177,7 @@ export function AugmentationsProvider({ fingerprint, children }: { fingerprint: 
       return true
     }
     return false
-  }, [draftId, items])
+  }, [draftId, items, dispatch])
 
   const api = useMemo<AugmentationsApi>(() => {
     const cards = state.items.filter(hasCard)
@@ -163,17 +189,21 @@ export function AugmentationsProvider({ fingerprint, children }: { fingerprint: 
       remove: (id) => dispatch({ type: 'remove', id }),
       place: (id, placement) => dispatch({ type: 'place', id, placement }),
       toggleFold: (id) => dispatch({ type: 'toggleFold', id }),
+      setFolded: (id, folded) => dispatch({ type: 'setFolded', id, folded }),
+      setCollapsed: (id, collapsed) => dispatch({ type: 'setCollapsed', id, collapsed }),
+      setShowRewrite: (id, showRewrite) => dispatch({ type: 'setShowRewrite', id, showRewrite }),
       select: (id) => dispatch({ type: 'select', id }),
       flipRewrite: (id) => dispatch({ type: 'flipRewrite', id }),
       toggleCollapse: (id) => dispatch({ type: 'toggleCollapse', id }),
       tidy: () => dispatch({ type: 'tidy' }),
       setDraft: (id) => dispatch({ type: 'setDraft', id }),
       toggleThreads: () => dispatch({ type: 'toggleThreads' }),
-      byId: (id) => state.items.find((i) => i.id === id),
+      byId: (id) => latest.current.items.find((i) => i.id === id),
+      getState: () => latest.current,
       shownCount: cards.filter((c) => !c.folded).length,
       inTextCount: cards.filter((c) => c.folded).length,
     }
-  }, [state, add, cite])
+  }, [state, add, cite, dispatch])
 
   return <Context.Provider value={api}>{children}</Context.Provider>
 }
