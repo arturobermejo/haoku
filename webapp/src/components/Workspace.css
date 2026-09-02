@@ -1,0 +1,48 @@
+.workspace {
+  position: relative;
+  height: 100%;
+  overflow: auto;
+}
+
+.workspace-inner {
+  position: relative;
+  min-height: 100%;
+  padding: var(--workspace-top) 0 var(--workspace-bottom);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+/* Threads from cards to their anchors — empty until augmentations exist. */
+.workspace-threads {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: var(--z-threads);
+}
+
+/* Floating cards — empty until augmentations exist. */
+.workspace-cards {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: var(--z-cards);
+}
+
+@keyframes halo {
+  0% {
+    opacity: 0.95;
+    transform: scale(0.35);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+.halo {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: halo var(--dur-halo) ease-out both;
+}

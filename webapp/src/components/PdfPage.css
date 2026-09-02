@@ -1,0 +1,57 @@
+.sheet {
+  position: relative;
+  z-index: var(--z-sheet);
+  background: var(--paper);
+  border-radius: var(--radius-sheet);
+  box-shadow: var(--shadow-sheet);
+  overflow: hidden;
+}
+
+.sheet-band {
+  position: relative;
+  width: 100%;
+}
+
+/* clips the full-page text layer to the band without clipping overlays that run past it */
+.sheet-text-clip {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+}
+
+/* room opened below a block whose rewrite runs longer than the original */
+.sheet-gap {
+  width: 100%;
+}
+
+.sheet-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* A collapsed section: the page loses the band's height and keeps this strip. */
+.fold-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0 18px;
+  border: none;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--sunken);
+  color: var(--ink-45);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+.fold-strip:hover {
+  color: var(--ink);
+  background: #f3f3f1;
+}
+.fold-strip-action {
+  color: var(--link);
+}

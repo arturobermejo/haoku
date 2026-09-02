@@ -1,0 +1,88 @@
+.topbar {
+  position: relative;
+  z-index: var(--z-topbar);
+  height: var(--topbar-height);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 18px;
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: none;
+}
+
+.topbar-mark {
+  width: 15px;
+  height: 15px;
+  border-radius: var(--radius-marker);
+  background: var(--ink);
+}
+
+.topbar-name {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.topbar-document {
+  flex: 1;
+  min-width: 80px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.topbar-title {
+  font-size: 12.5px;
+  color: var(--ink-85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topbar-meta {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-45);
+  white-space: nowrap;
+}
+
+.topbar-page {
+  min-width: 82px;
+  text-align: right;
+}
+
+.topbar-zoom {
+  display: flex;
+  gap: 4px;
+}
+
+.topbar-zoom .control {
+  padding: 0 9px;
+  min-width: 27px;
+}
+
+.topbar-zoom-value {
+  min-width: 52px;
+  font-variant-numeric: tabular-nums;
+}
+
+.control.is-off {
+  color: var(--ink-25);
+}
+
+@media (max-width: 1100px) {
+  .topbar-counter {
+    display: none;
+  }
+}

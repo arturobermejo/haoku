@@ -1,0 +1,71 @@
+.dropzone {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 40px;
+}
+
+.dropzone-body {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+  max-width: 560px;
+  animation: appear 300ms var(--ease) both;
+}
+
+.dropzone-title {
+  margin: 0;
+  font-family: var(--font-document);
+  font-size: 40px;
+  line-height: 1.12;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+.dropzone-lead {
+  margin: 0 0 18px;
+  font-size: 14.5px;
+  line-height: 1.65;
+  color: var(--ink-70);
+  text-wrap: pretty;
+}
+
+.dropzone-sheet {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 44px 32px;
+  background: var(--paper);
+  border: 1px dashed rgba(0, 0, 0, 0.18);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-sheet);
+  transition: border-color 160ms var(--ease), transform 160ms var(--ease);
+}
+
+.dropzone-sheet.is-dragging {
+  border-color: var(--ink);
+  transform: translateY(-2px);
+}
+
+.dropzone-sheet.is-busy {
+  opacity: 0.7;
+}
+
+.dropzone-hint {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-45);
+}
+
+.dropzone-error {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--kind-question);
+}

@@ -1,0 +1,32 @@
+.editable {
+  display: block;
+  cursor: text;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border-radius: 4px;
+}
+.editable:hover {
+  background: rgba(0, 0, 0, 0.035);
+}
+.editable--empty {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-25);
+}
+.editable--input {
+  display: block;
+  width: 100%;
+  resize: none;
+  border: none;
+  outline: none;
+  background: var(--sunken);
+  border-radius: 4px;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  font: inherit;
+  color: inherit;
+  line-height: inherit;
+  overflow: hidden;
+}

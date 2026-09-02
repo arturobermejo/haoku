@@ -1,0 +1,83 @@
+/* saoku design tokens — transcribed from the "Paper first, chrome quiet" design system. */
+:root {
+  /* surfaces */
+  --canvas: #f4f3f0;
+  --paper: #ffffff;
+  --sunken: #fafaf9;
+  --summary: oklch(0.95 0.02 245);
+
+  /* ink */
+  --ink: #17181b;
+  --ink-85: #3c3f45;
+  --ink-70: #5a5e66;
+  --ink-45: #8b8e93;
+  --ink-25: #b6b9bd;
+  --link: oklch(0.55 0.11 245);
+  --link-hover: oklch(0.42 0.13 245);
+
+  /* lines and borders */
+  --line: rgba(0, 0, 0, 0.07);
+  --line-strong: rgba(0, 0, 0, 0.1);
+  --border: rgba(0, 0, 0, 0.08);
+  --border-control: rgba(0, 0, 0, 0.12);
+  --border-selected: rgba(0, 0, 0, 0.24);
+  --border-hover: rgba(0, 0, 0, 0.34);
+
+  /* the dotted canvas grid */
+  --grid-dot: rgba(0, 0, 0, 0.08);
+  --grid-size: 27px;
+
+  /* typefaces */
+  --font-document: 'Spectral', Georgia, 'Times New Roman', serif;
+  --font-ui: 'Space Grotesk', Helvetica, Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+
+  /* semantic kinds — accent (chips, markers) and highlight (text wash) */
+  --kind-claim: oklch(0.6 0.13 75);
+  --kind-claim-hl: oklch(0.91 0.09 85 / 0.8);
+  --kind-definition: oklch(0.55 0.14 300);
+  --kind-definition-hl: oklch(0.9 0.07 300 / 0.72);
+  --kind-flashcard: oklch(0.55 0.1 200);
+  --kind-flashcard-hl: oklch(0.9 0.06 200 / 0.8);
+  --kind-question: oklch(0.56 0.15 20);
+  --kind-evidence: oklch(0.5 0.1 155);
+  --kind-evidence-hl: oklch(0.95 0.03 155 / 0.6);
+  --kind-concept: oklch(0.58 0.12 45);
+  --kind-synthesis: oklch(0.5 0.11 245);
+  --kind-diagram: oklch(0.45 0.02 260);
+
+  /* geometry */
+  --radius-sheet: 3px;
+  --radius-marker: 5px;
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --radius-chip: 999px;
+
+  /* elevation */
+  --shadow-sheet: 0 1px 2px rgba(0, 0, 0, 0.05), 0 28px 64px -30px rgba(0, 0, 0, 0.38);
+  --shadow-card: 0 6px 18px -12px rgba(0, 0, 0, 0.24);
+  --shadow-card-selected: 0 14px 30px -14px rgba(0, 0, 0, 0.3);
+  --shadow-card-drag: 0 26px 50px -18px rgba(0, 0, 0, 0.4);
+  --shadow-dock: 0 20px 50px -18px rgba(0, 0, 0, 0.35);
+
+  /* motion */
+  --dur-appear: 220ms;
+  --dur-halo: 1.1s;
+  --ease: ease;
+  --ease-panel: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* stacking */
+  --z-sheet: 1;
+  --z-threads: 4;
+  --z-topbar: 5;
+  --z-cards: 6;
+  --z-dock: 20;
+
+  /* layout */
+  --topbar-height: 54px;
+  --workspace-top: 44px;
+  --workspace-bottom: 120px;
+  --sheet-gap: 40px;
+
+  --selection: oklch(0.88 0.07 245 / 0.55);
+}
