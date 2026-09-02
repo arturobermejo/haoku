@@ -1,0 +1,79 @@
+.selection-toolbar {
+  position: fixed;
+  z-index: var(--z-dock);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 40px;
+  padding: 0 6px;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-card-selected);
+  animation: appear 180ms var(--ease) both;
+  user-select: none;
+}
+.selection-toolbar--message {
+  padding: 0 12px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--kind-question);
+}
+
+.selection-kinds {
+  display: flex;
+  gap: 3px;
+  padding: 0 4px;
+}
+.selection-kind {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-marker);
+  background: color-mix(in oklch, var(--accent) 14%, var(--paper));
+  color: var(--accent);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+}
+.selection-kind.is-active {
+  background: var(--accent);
+  color: var(--paper);
+}
+.selection-kind:hover {
+  border-color: var(--accent);
+}
+
+.selection-divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--line-strong);
+}
+
+.selection-action {
+  height: 26px;
+  padding: 0 9px;
+  border: none;
+  background: none;
+  border-radius: 7px;
+  color: var(--ink-85);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.selection-action:hover {
+  background: var(--sunken);
+  color: var(--ink);
+}
+.selection-action.is-hot {
+  color: var(--link);
+}
