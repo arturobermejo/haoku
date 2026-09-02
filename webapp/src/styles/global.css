@@ -1,0 +1,118 @@
+@import './tokens.css';
+@import './textLayer.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+::selection {
+  background: var(--selection);
+}
+
+a {
+  color: var(--link);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--link-hover);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+/* the dotted bone canvas behind everything the agent leaves behind */
+.canvas-grid {
+  background-color: var(--canvas);
+  background-image: radial-gradient(var(--grid-dot) 1px, transparent 1px);
+  background-size: var(--grid-size) var(--grid-size);
+}
+
+.scroll::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+.scroll::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.13);
+  border-radius: 9px;
+}
+.scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* machine voice: labels, anchors, counters */
+.mono-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-45);
+  white-space: nowrap;
+}
+
+/* the v2 control: 27px, mono uppercase, quiet border */
+.control {
+  height: 27px;
+  padding: 0 11px;
+  border: 1px solid var(--border-control);
+  background: var(--paper);
+  color: var(--ink-85);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition: border-color 120ms var(--ease), color 120ms var(--ease);
+}
+.control:hover {
+  border-color: var(--border-hover);
+  color: var(--ink);
+}
+.control:disabled {
+  color: var(--ink-25);
+  cursor: default;
+  border-color: var(--border-control);
+}
+.control--primary {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+.control--primary:hover {
+  background: #35383d;
+  border-color: #35383d;
+  color: var(--paper);
+}
+
+@keyframes appear {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
