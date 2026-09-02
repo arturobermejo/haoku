@@ -8,7 +8,7 @@ function sheetOf(node: Node | null): HTMLElement | null {
 }
 
 /** Merges rects that sit on the same line (pdf.js emits one per text span). */
-function mergeLines(rects: Rect[]): Rect[] {
+export function mergeLines(rects: Rect[]): Rect[] {
   const sorted = [...rects].sort((a, b) => a.y - b.y || a.x - b.x)
   const lines: Rect[] = []
   for (const r of sorted) {

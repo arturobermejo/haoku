@@ -1,4 +1,6 @@
+import { useSyncExternalStore } from 'react'
 import { useAugmentations } from '../augment/store'
+import { getStatus, subscribeStatus } from '../tools/webmcp'
 import './TopBar.css'
 
 interface TopBarProps {
@@ -16,6 +18,7 @@ interface TopBarProps {
 
 export function TopBar({ title, pageCount, currentPage, scale, onZoomIn, onZoomOut, onFitWidth, onReadingWidth, onClose }: TopBarProps) {
   const aug = useAugmentations()
+  const webmcp = useSyncExternalStore(subscribeStatus, getStatus)
 
   return (
     <header className="topbar">
@@ -42,6 +45,13 @@ export function TopBar({ title, pageCount, currentPage, scale, onZoomIn, onZoomO
       <button type="button" className="control" onClick={aug.tidy}>
         tidy up
       </button>
+
+      <span
+        className={`mono-label topbar-webmcp${webmcp.registered > 0 ? ' is-on' : ''}`}
+        title={webmcp.registered > 0 ? `${webmcp.registered} tools registered on ${webmcp.api}` : (webmcp.error ?? 'WebMCP not registered')}
+      >
+        webmcp{webmcp.registered > 0 ? ` · ${webmcp.registered}` : ''}
+      </span>
 
       <span className="mono-label topbar-page">
         p. {currentPage} / {pageCount}

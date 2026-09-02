@@ -86,3 +86,10 @@
     display: none;
   }
 }
+
+.topbar-webmcp {
+  color: var(--ink-25);
+}
+.topbar-webmcp.is-on {
+  color: var(--link);
+}
