@@ -77,8 +77,9 @@ npm install
 npm run dev
 ```
 
-Then open http://localhost:5173. With no sources, the left panel offers **load demo sources**: three
-short papers on memory in AI agents, generated for the demo, plus a diagram and a page of notes.
+Then open http://localhost:5173. With no sources, the left panel offers **load demo project**: five
+sources on memory in AI agents (three short papers written for the demo, a page of notes and a
+diagram), a document that cites four of them, and the practice questions that go with it.
 
 The other scripts:
 
