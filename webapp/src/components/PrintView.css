@@ -1,0 +1,239 @@
+/* Hidden on screen; the only thing on paper. */
+@media screen {
+  .print-doc {
+    display: none;
+  }
+}
+
+@media print {
+  @page {
+    margin: 18mm 20mm;
+  }
+  html,
+  body,
+  #root {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  #root {
+    display: none !important;
+  }
+  .tool-activity-badge {
+    display: none !important;
+  }
+  .print-doc {
+    display: block;
+    max-width: 170mm;
+    margin: 0 auto;
+    color: #111;
+    font-family: var(--font-ui);
+    font-size: 11pt;
+    line-height: 1.5;
+  }
+}
+
+.print-head {
+  margin-bottom: 8mm;
+  padding-bottom: 4mm;
+  border-bottom: 1px solid #bbb;
+}
+.print-title {
+  font-family: var(--font-document);
+  font-weight: 500;
+  font-size: 24pt;
+  line-height: 1.2;
+  margin: 0 0 2mm;
+}
+.print-meta,
+.print-label,
+.print-passages,
+.print-node-source,
+.print-edge {
+  font-family: var(--font-mono);
+  font-size: 8pt;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #666;
+}
+.print-block {
+  margin: 0 0 6mm;
+  break-inside: avoid;
+}
+.print-block--heading {
+  margin-top: 6mm;
+  margin-bottom: 2mm;
+}
+.print-heading {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin: 0;
+}
+h2.print-heading {
+  font-size: 12pt;
+}
+h3.print-heading {
+  font-size: 10.5pt;
+}
+h4.print-heading {
+  font-size: 9.5pt;
+  color: #444;
+}
+.print-paragraph {
+  font-family: var(--font-document);
+  font-size: 12pt;
+  line-height: 1.6;
+  margin: 0;
+}
+.print-mark {
+  font-family: var(--font-mono);
+  font-size: 7.5pt;
+  color: #2a5f8f;
+  margin: 0 1px;
+}
+.print-label {
+  margin-bottom: 1.5mm;
+}
+.print-block-title {
+  font-weight: 600;
+  margin-bottom: 2mm;
+}
+.print-callout {
+  padding: 4mm 5mm;
+  border-left: 2px solid #999;
+  background: #f4f3f0;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.print-callout--idea {
+  border-color: #6f8fb0;
+  background: #eef3f8;
+}
+.print-callout--example {
+  border-color: #6c9a6f;
+  background: #eef5ee;
+}
+.print-callout--warning {
+  border-color: #c39a3a;
+  background: #faf4e6;
+}
+.print-callout--why {
+  border-color: #b7594f;
+  background: #f9eeec;
+}
+.print-callout-title {
+  font-weight: 600;
+  margin-bottom: 1mm;
+}
+.print-nodes,
+.print-cards,
+.print-questions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.print-node {
+  display: inline-block;
+  padding: 1.5mm 3mm;
+  border: 1px solid #999;
+  border-radius: 2mm;
+}
+.print-edge {
+  margin: 1mm 0 1mm 4mm;
+}
+.print-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 10pt;
+}
+.print-table th,
+.print-table td {
+  border: 1px solid #bbb;
+  padding: 1.5mm 2.5mm;
+  text-align: left;
+  vertical-align: top;
+}
+.print-table thead th {
+  font-family: var(--font-mono);
+  font-size: 8pt;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: #eeece6;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.print-table tbody th {
+  font-weight: 600;
+  width: 22%;
+}
+.print-cards li,
+.print-questions li {
+  margin-bottom: 3mm;
+  padding-left: 4mm;
+  border-left: 1px solid #ccc;
+}
+.print-card-q {
+  font-weight: 600;
+}
+.print-card-a {
+  font-family: var(--font-document);
+}
+.print-question {
+  font-weight: 600;
+}
+.print-options {
+  list-style: none;
+  margin: 1mm 0;
+  padding: 0;
+}
+.print-options li {
+  border: 0;
+  margin: 0;
+  padding-left: 2mm;
+}
+.print-options li.is-answer {
+  font-weight: 600;
+}
+.print-explanation {
+  font-size: 10pt;
+  color: #444;
+  font-style: italic;
+}
+.print-figure {
+  margin: 0;
+}
+.print-figure img {
+  max-width: 100%;
+  max-height: 120mm;
+  display: block;
+}
+.print-figure figcaption {
+  font-size: 10pt;
+  color: #444;
+  margin-top: 1.5mm;
+}
+.print-passages {
+  margin: 2mm 0 0;
+  padding-left: 5mm;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-size: 8.5pt;
+  color: #555;
+}
+.print-passages li {
+  margin-bottom: 0.5mm;
+}
+.print-passage-source {
+  font-weight: 500;
+}
+.print-passage-quote {
+  font-family: var(--font-document);
+  font-size: 9.5pt;
+  font-style: italic;
+}
+.print-empty {
+  color: #777;
+  font-style: italic;
+}
