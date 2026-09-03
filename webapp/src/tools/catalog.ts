@@ -275,11 +275,11 @@ function markdownFor(parsed: Parsed, blockKeys: string[], nestedKeys: (string | 
   return blockToMarkdown({ ...d, cites: unique([...d.cites, ...blockKeys]) })
 }
 
-/** The passages the user gathered, when a tool asks for them; clears the basket once used. */
+/** The passages the user gathered in the context, when a tool asks for them; clears them once used. */
 function takeCollected(ctx: ToolContext, input: Obj): Citation[] {
   if (input.use_collected !== true) return []
   const collected = ctx.ws.getState().collected
-  if (collected.length) ctx.ws.stopCollecting()
+  if (collected.length) ctx.ws.clearCollected()
   return collected
 }
 
@@ -425,10 +425,10 @@ export const TOOLS: ToolDef[] = [
         ok: true,
         summary: [
           block ? `${block.kind} ${block.id} is selected${text ? ' with text highlighted' : ''}.` : text ? 'Text is selected but no block.' : 'Nothing is selected.',
-          state.collecting ? ` The user has gathered ${state.collected.length} passage(s)${state.collectTarget ? ` for block ${state.collectTarget}` : ''} — pass use_collected: true to add_block or link_sources to use them.` : '',
+          state.collected.length ? ` The user has gathered ${state.collected.length} passage(s) in the context — pass use_collected: true to add_block or link_sources to use them.` : '',
         ].join(''),
         block: block ? describeBlock(ctx, block, true) : null,
-        collecting: state.collecting ? { passages: state.collected.map((c) => describeCitation(ctx, c)), target_block_id: state.collectTarget } : null,
+        gathered: state.collected.length ? state.collected.map((c) => describeCitation(ctx, c)) : null,
         selected_text: inDocument && text ? text : null,
         source_selection: sourceSelection,
         open_source: state.viewer ? { source_id: state.viewer.sourceId, page: state.viewer.page } : null,
@@ -460,7 +460,7 @@ export const TOOLS: ToolDef[] = [
       )
       return {
         ok: true,
-        summary: `"${state.title}": ${state.blocks.length} block(s) from ${ctx.sources.sources.length} source(s).${state.collecting ? ` The user has gathered ${state.collected.length} passage(s) (see get_selection).` : ''}`,
+        summary: `"${state.title}": ${state.blocks.length} block(s) from ${ctx.sources.sources.length} source(s).${state.collected.length ? ` The user has gathered ${state.collected.length} passage(s) in the context (see get_selection).` : ''}`,
         title: state.title,
         sources: ctx.sources.sources.map((s) => ({ id: s.id, name: s.name, kind: s.kind })),
         blocks: state.blocks.map((b) => describeBlock(ctx, b, full)),
@@ -487,7 +487,7 @@ export const TOOLS: ToolDef[] = [
         markdown: { type: 'string', description: 'Raw markdown for exactly one block, instead of type + content.' },
         position: positionSchema,
         citations: { type: 'array', items: citationSchema, description: 'Sources this block draws on, in the order the [n] marks refer to.' },
-        use_collected: { type: 'boolean', description: 'Also cite the passages the user gathered (get_selection → collecting), before the ones listed here. Clears the basket.' },
+        use_collected: { type: 'boolean', description: 'Also cite the passages the user gathered in the context (get_selection → gathered), before the ones listed here. Clears them.' },
       },
     },
     execute: async (input, ctx) => {
@@ -681,13 +681,13 @@ export const TOOLS: ToolDef[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        block_id: { type: 'string', description: 'Defaults to the block the user started collecting for, if any.' },
+        block_id: { type: 'string', description: 'Defaults to the selected block.' },
         passages: { type: 'array', items: citationSchema },
-        use_collected: { type: 'boolean', description: 'Link the passages the user gathered (get_selection → collecting). Clears the basket.' },
+        use_collected: { type: 'boolean', description: 'Link the passages the user gathered in the context (get_selection → gathered). Clears them.' },
       },
     },
     execute: async (input, ctx) => {
-      const block = blockOf(ctx, str(input, 'block_id') ?? ctx.ws.getState().collectTarget ?? undefined)
+      const block = blockOf(ctx, str(input, 'block_id') ?? ctx.ws.getState().selectedBlockId ?? undefined)
       if (isFail(block)) return block
       const listed = await resolveCitations(ctx, input.passages)
       if (isFail(listed)) return listed

@@ -28,9 +28,8 @@ interface State extends Snapshot {
   practiceProgress: Record<string, PracticeProgress>
   rawView: boolean
   selectedBlockId: string | null
-  collecting: boolean
+  /** Passages gathered from the sources, shown in the context panel until they become a block. */
   collected: Citation[]
-  collectTarget: string | null
   focusKey: number
   viewer: ViewerTarget | null
   past: Snapshot[]
@@ -63,10 +62,9 @@ type Action =
   | { type: 'gradePractice'; id: string; correct: boolean }
   | { type: 'resetPractice' }
   | { type: 'select'; id: string | null }
-  | { type: 'startCollecting'; target: string | null }
-  | { type: 'stopCollecting' }
   | { type: 'collect'; citation: Citation }
   | { type: 'uncollect'; index: number }
+  | { type: 'clearCollected' }
   | { type: 'focus'; id: string }
   | { type: 'openViewer'; target: Omit<ViewerTarget, 'key'> }
   | { type: 'closeViewer' }
@@ -87,9 +85,7 @@ const initial: State = {
   practiceProgress: {},
   rawView: false,
   selectedBlockId: null,
-  collecting: false,
   collected: [],
-  collectTarget: null,
   focusKey: 0,
   viewer: null,
   past: [],
@@ -97,7 +93,7 @@ const initial: State = {
 }
 
 const HISTORY_LIMIT = 100
-const VIEW_ACTIONS = new Set<Action['type']>(['load', 'reset', 'answerQuiz', 'reveal', 'setRawView', 'addPractice', 'removePractice', 'gradePractice', 'resetPractice', 'select', 'startCollecting', 'stopCollecting', 'collect', 'uncollect', 'focus', 'openViewer', 'closeViewer', 'undo', 'redo'])
+const VIEW_ACTIONS = new Set<Action['type']>(['load', 'reset', 'answerQuiz', 'reveal', 'setRawView', 'addPractice', 'removePractice', 'gradePractice', 'resetPractice', 'select', 'collect', 'uncollect', 'clearCollected', 'focus', 'openViewer', 'closeViewer', 'undo', 'redo'])
 
 const snapshot = (s: State): Snapshot => ({ title: s.title, markdown: s.markdown, highlights: s.highlights, blocks: s.blocks, footnotes: s.footnotes })
 
@@ -108,7 +104,7 @@ function fromDoc(doc: WorkspaceDoc): Pick<State, 'title' | 'markdown' | 'highlig
 
 function restore(state: State, snap: Snapshot): State {
   const ids = new Set(snap.blocks.map((b) => b.id))
-  return { ...state, ...snap, selectedBlockId: state.selectedBlockId && ids.has(state.selectedBlockId) ? state.selectedBlockId : null, collectTarget: state.collectTarget && ids.has(state.collectTarget) ? state.collectTarget : null }
+  return { ...state, ...snap, selectedBlockId: state.selectedBlockId && ids.has(state.selectedBlockId) ? state.selectedBlockId : null }
 }
 
 function reducer(state: State, action: Action): State {
@@ -123,7 +119,7 @@ function apply(state: State, action: Action): State {
     case 'load':
       return { ...initial, loaded: true, ...(action.doc ? fromDoc(action.doc) : {}) }
     case 'replace':
-      return { ...state, ...fromDoc(action.doc), revealed: {}, selectedBlockId: null, collecting: false, collected: [], collectTarget: null, viewer: null, rawView: false }
+      return { ...state, ...fromDoc(action.doc), revealed: {}, selectedBlockId: null, collected: [], viewer: null, rawView: false }
     case 'reset':
       return { ...initial, loaded: true }
     case 'setTitle':
@@ -140,7 +136,6 @@ function apply(state: State, action: Action): State {
         quizAnswers: forget.size ? (drop(state.quizAnswers) as Record<string, number>) : state.quizAnswers,
         revealed: forget.size ? (drop(state.revealed) as Record<string, boolean>) : state.revealed,
         selectedBlockId: action.select !== undefined ? action.select : state.selectedBlockId && action.blocks.some((b) => b.id === state.selectedBlockId) ? state.selectedBlockId : null,
-        collectTarget: state.collectTarget && action.blocks.some((b) => b.id === state.collectTarget) ? state.collectTarget : null,
       }
     }
     case 'addHighlight':
@@ -167,14 +162,12 @@ function apply(state: State, action: Action): State {
       return { ...state, practiceProgress: {} }
     case 'select':
       return { ...state, selectedBlockId: action.id }
-    case 'startCollecting':
-      return { ...state, collecting: true, collectTarget: action.target }
-    case 'stopCollecting':
-      return { ...state, collecting: false, collected: [], collectTarget: null }
     case 'collect':
-      return { ...state, collecting: true, collected: [...state.collected, action.citation] }
+      return { ...state, collected: [...state.collected, action.citation] }
     case 'uncollect':
       return { ...state, collected: state.collected.filter((_, i) => i !== action.index) }
+    case 'clearCollected':
+      return { ...state, collected: [] }
     case 'focus':
       return { ...state, selectedBlockId: action.id, focusKey: Date.now() }
     case 'openViewer':
@@ -232,10 +225,10 @@ export interface WorkspaceApi extends State {
   gradePractice: (id: string, correct: boolean) => void
   resetPractice: () => void
   select: (id: string | null) => void
-  startCollecting: (target?: string | null) => void
-  stopCollecting: () => void
+  /** Adds a passage to the context (the ones gathered so far); duplicates are ignored. */
   collect: (citation: Citation) => void
   uncollect: (index: number) => void
+  clearCollected: () => void
   focusBlock: (id: string) => void
   openViewer: (target: Omit<ViewerTarget, 'key'>) => void
   closeViewer: () => void
@@ -419,10 +412,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       gradePractice: (id, correct) => dispatch({ type: 'gradePractice', id, correct }),
       resetPractice: () => dispatch({ type: 'resetPractice' }),
       select: (id) => dispatch({ type: 'select', id }),
-      startCollecting: (target = null) => dispatch({ type: 'startCollecting', target }),
-      stopCollecting: () => dispatch({ type: 'stopCollecting' }),
-      collect: (citation) => dispatch({ type: 'collect', citation }),
+      collect: (citation) => {
+        if (latest.current.collected.some((c) => sameCitation(c, citation))) return
+        dispatch({ type: 'collect', citation })
+      },
       uncollect: (index) => dispatch({ type: 'uncollect', index }),
+      clearCollected: () => dispatch({ type: 'clearCollected' }),
       focusBlock: (id) => dispatch({ type: 'focus', id }),
       openViewer: (target) => dispatch({ type: 'openViewer', target }),
       closeViewer: () => dispatch({ type: 'closeViewer' }),
