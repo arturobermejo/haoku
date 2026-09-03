@@ -202,3 +202,19 @@
 .practice-done .practice-actions {
   justify-content: center;
 }
+
+.practice-remove {
+  border: 0;
+  background: none;
+  padding: 0;
+  margin-left: 14px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  color: var(--ink-25);
+  cursor: pointer;
+}
+.practice-remove:hover,
+.practice-remove.is-armed {
+  color: var(--kind-question);
+}
