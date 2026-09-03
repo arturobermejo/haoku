@@ -1,8 +1,10 @@
-# haoku
+# Haoku
 
 A knowledge workspace for studying with an agent. You bring the sources; the agent writes the
 document with you and turns it into questions to drill, and every claim points back at the passage
 it came from.
+
+![Haoku: the sources on the left, the document in the middle, and the passages the selected block draws on to the right](docs/haoku.png)
 
 **Study** is three columns:
 
@@ -27,7 +29,7 @@ Clicking the passage in Context opens the source at that page with the quote hig
 
 ## WebMCP: the agent is not in the app
 
-haoku has no chat box. It exposes its own UI as **tools over [WebMCP](https://github.com/webmachinelearning/webmcp)**,
+Haoku has no chat box. It exposes its own UI as **tools over [WebMCP](https://github.com/webmachinelearning/webmcp)**,
 and the agent you already use in your browser drives it: it reads your sources, writes into the
 sheet, opens a PDF at the page it is talking about, and adds practice questions.
 
@@ -85,7 +87,7 @@ The other scripts:
 
 | script | what it does |
 |---|---|
-| `npm run dev` | Vite dev server on 5173 |
+| `npm run dev` | the Vite dev server |
 | `npm run build` | typecheck, build the standalone `space-*` bundle, then build the app |
 | `npm test` | vitest over the Markdown layer (parse, serialize, citations, migrations) |
 | `npm run lint` | oxlint |

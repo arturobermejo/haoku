@@ -1,4 +1,4 @@
-/** The one IndexedDB database haoku keeps; every store lives here. */
+/** The one IndexedDB database Haoku keeps; every store lives here. */
 
 const DB_NAME = 'haoku'
 /** The database name from before the product was renamed; its contents are adopted once, then it is deleted. */
