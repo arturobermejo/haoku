@@ -1,22 +1,20 @@
 /**
- * The reader's tool catalog: what an agent can do to the open document.
- * Inputs are phrased the way a person would say them — page numbers as
- * printed, passages as quotes — and every failure comes back as data.
+ * The workspace's tool catalog: what an agent can do to the sources and the
+ * knowledge space. Inputs are phrased the way a person would say them —
+ * sources by name or id, pages as printed, passages as quotes — and every
+ * failure comes back as data.
  */
-import { newId } from '../augment/ids'
-import { unionRect } from '../augment/geometry'
-import { anchorFromSelection } from '../augment/selection'
-import type { AugmentationsApi } from '../augment/store'
-import { anchorsOf, hasCard, type Anchor, type Augmentation, type DiagramEdge, type DiagramNode, type Kind } from '../augment/types'
-import type { WorkspaceApi } from '../components/workspaceContext'
-import type { PdfDoc } from '../pdf/types'
-import { anchorForMatch, findInPage, type PageIndex } from './textIndex'
+import { newId } from '../workspace/ids'
+import { sections } from '../workspace/coverage'
+import { ensureMarks } from '../workspace/linking'
+import { insertIndex } from '../workspace/position'
+import type { SourcesApi } from '../workspace/sources'
+import type { WorkspaceApi } from '../workspace/store'
+import { BLOCK_TYPES, blockExcerpt, citationsOf, HIGHLIGHT_KINDS, type Block, type BlockContent, type Citation, type DiagramEdge, type DiagramNode, type HighlightKind, type Position, type Source } from '../workspace/types'
 
 export interface ToolContext {
-  doc: PdfDoc
-  aug: AugmentationsApi
   ws: WorkspaceApi
-  index: (page: number) => Promise<PageIndex>
+  sources: SourcesApi
 }
 
 export type ToolResult = { ok: true; summary: string; [key: string]: unknown } | { ok: false; error: string; hint?: string }
@@ -30,414 +28,595 @@ export interface ToolDef {
   execute: (input: Record<string, unknown>, ctx: ToolContext) => Promise<ToolResult>
 }
 
-const HIGHLIGHT_KIND_VALUES: Kind[] = ['claim', 'definition', 'evidence', 'concept', 'question']
-
-const pageParam = { type: 'integer', minimum: 1, description: 'Page number as printed in the reader, starting at 1.' }
-const quoteParam = { type: 'string', description: 'A passage of the page, quoted from get_page_text. Whitespace, line breaks and hyphenation do not matter.' }
-const occurrenceParam = { type: 'integer', minimum: 1, description: 'Which occurrence to use when the quote appears more than once on the page. Defaults to 1.' }
-
+type Obj = Record<string, unknown>
 const fail = (error: string, hint?: string): ToolResult => ({ ok: false, error, ...(hint ? { hint } : {}) })
+const str = (o: Obj, k: string) => (typeof o[k] === 'string' && (o[k] as string).trim() ? (o[k] as string) : undefined)
+const int = (o: Obj, k: string) => (typeof o[k] === 'number' && Number.isInteger(o[k]) ? (o[k] as number) : undefined)
+const obj = (v: unknown): Obj | undefined => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Obj) : undefined)
+const arr = (v: unknown): unknown[] | undefined => (Array.isArray(v) ? v : undefined)
 
-function str(input: Record<string, unknown>, key: string): string | undefined {
-  const v = input[key]
-  return typeof v === 'string' && v.trim() ? v : undefined
+const sourceParam = { type: 'string', description: 'A source by id (from list_sources) or by file name.' }
+const pageParam = { type: 'integer', minimum: 1, description: 'Page number as printed, starting at 1. Text sources are a single page.' }
+const quoteParam = { type: 'string', description: 'A passage of the source, quoted from read_source or search_sources. Spacing, line breaks and hyphenation do not matter.' }
+const citationSchema = {
+  type: 'object',
+  properties: { source: sourceParam, page: pageParam, quote: quoteParam, occurrence: { type: 'integer', minimum: 1, description: 'Which occurrence when the quote repeats on the page. Defaults to 1.' } },
+  required: ['source'],
+  description: 'Where a piece of content comes from. Give page and quote for PDFs and text; an image is cited by source alone.',
 }
-function int(input: Record<string, unknown>, key: string): number | undefined {
-  const v = input[key]
-  return typeof v === 'number' && Number.isInteger(v) ? v : undefined
-}
-
-function checkPage(ctx: ToolContext, page: number | undefined): ToolResult | number {
-  if (page === undefined) return fail('"page" is required.', `Pages run from 1 to ${ctx.doc.pageCount}.`)
-  if (page < 1 || page > ctx.doc.pageCount) return fail(`There is no page ${page}.`, `Pages run from 1 to ${ctx.doc.pageCount}.`)
-  return page
-}
-
-/** Turns { page, quote, occurrence } into an anchor, or an explained failure. */
-async function resolveQuote(ctx: ToolContext, input: Record<string, unknown>, quoteKey = 'quote'): Promise<ToolResult | Anchor> {
-  const page = checkPage(ctx, int(input, 'page'))
-  if (typeof page !== 'number') return page
-  const quote = str(input, quoteKey)
-  if (!quote) return fail(`"${quoteKey}" is required.`, 'Quote a passage of the page as returned by get_page_text.')
-  const index = await ctx.index(page)
-  const matches = findInPage(index, quote)
-  if (matches.length === 0) return fail(`"${quote.slice(0, 60)}${quote.length > 60 ? '…' : ''}" does not appear on page ${page}.`, 'Copy the passage from get_page_text, or locate it with find_in_document.')
-  const occurrence = int(input, 'occurrence') ?? 1
-  if (occurrence > matches.length) return fail(`The quote appears ${matches.length} time(s) on page ${page}; there is no occurrence ${occurrence}.`)
-  const anchor = anchorForMatch(index, matches[occurrence - 1])
-  if (anchor.rects.length === 0) return fail('The passage has no printed position on the page.', 'It may be part of an image; choose a nearby line instead.')
-  return anchor
+const positionSchema = {
+  description: 'Where the block goes: "end" (default), "start", { "after": block_id }, { "before": block_id } or { "in_section": heading_block_id } for the end of that section.',
+  oneOf: [
+    { type: 'string', enum: ['end', 'start'] },
+    { type: 'object', properties: { after: { type: 'string' } }, required: ['after'] },
+    { type: 'object', properties: { before: { type: 'string' } }, required: ['before'] },
+    { type: 'object', properties: { in_section: { type: 'string' } }, required: ['in_section'] },
+  ],
 }
 
-function describe(item: Augmentation): Record<string, unknown> {
-  const anchors = anchorsOf(item)
-  const base = { id: item.id, type: item.type, pages: [...new Set(anchors.map((a) => a.page))], quote: anchors[0]?.text.slice(0, 120) }
-  switch (item.type) {
-    case 'highlight':
-      return { ...base, kind: item.kind, note: item.note, card_shown: item.note !== undefined && !item.folded }
-    case 'note':
-      return { ...base, title: item.title, body: item.body, citations: item.anchors.length, card_shown: !item.folded }
-    case 'rewrite':
-      return { ...base, text: item.text, showing: item.showRewrite ? 'rewrite' : 'original' }
-    case 'fold':
-      return { id: item.id, type: item.type, pages: [item.page], collapsed: item.collapsed, height_pt: Math.round(item.y1 - item.y0) }
-    case 'diagram':
-      return { ...base, title: item.title, nodes: item.nodes.map((n) => ({ label: n.label, page: n.anchor.page })), card_shown: !item.folded }
-    case 'flashcard':
-      return { ...base, question: item.question, answer: item.answer, card_shown: !item.folded }
+const CONTENT_SHAPES: Record<BlockContent['type'], string> = {
+  heading: '{ text, level?: 1|2|3 (default 2) }',
+  paragraph: '{ text } — write [1], [2]… in the text to mark where each citation applies',
+  callout: '{ title?, body, tone?: "idea"|"example"|"warning"|"why" (default "idea") }',
+  diagram: '{ title?, nodes: [{ label, citation? }], edges?: [{ from, to, label? }] } — from/to by 1-based node position or label; without edges the nodes form a chain',
+  comparison: '{ title?, columns: [string], rows: [{ label, cells: [string] }] }',
+  flashcards: '{ cards: [{ question, answer, citation? }] }',
+  quiz: '{ questions: [{ prompt, options: [string], answer: 1-based position or the option text, explanation? }] }',
+  image: '{ source: an image source (id or name), caption? }',
+}
+
+function sourceOf(ctx: ToolContext, ref: string | undefined): Source | ToolResult {
+  if (!ref) return fail('"source" is required.', 'Use an id or a file name from list_sources.')
+  const s = ctx.sources.byRef(ref)
+  if (!s) return fail(`There is no source "${ref}".`, `Sources: ${ctx.sources.sources.map((x) => `${x.id} (${x.name})`).join(', ') || 'none — the user has to add some'}.`)
+  return s
+}
+
+/** Validates a citation against the sources; finds the page when a PDF quote comes without one. */
+async function resolveCitation(ctx: ToolContext, raw: unknown, label = 'citation'): Promise<Citation | ToolResult> {
+  const c = obj(raw)
+  if (!c) return fail(`${label} must be an object { source, page?, quote? }.`)
+  const source = sourceOf(ctx, str(c, 'source') ?? str(c, 'source_id'))
+  if ('ok' in source) return { ...source, error: `${label}: ${source.error}` }
+  const quote = str(c, 'quote')
+  const occurrence = int(c, 'occurrence') ?? 1
+  if (source.kind === 'image') return { sourceId: source.id }
+  if (!quote) return int(c, 'page') ? { sourceId: source.id, page: int(c, 'page') } : { sourceId: source.id }
+  const pages = int(c, 'page') ? [int(c, 'page')!] : Array.from({ length: ctx.sources.pageCount(source.id) }, (_, i) => i + 1)
+  if (pages[0] > ctx.sources.pageCount(source.id)) return fail(`${label}: ${source.name} has ${ctx.sources.pageCount(source.id)} page(s); there is no page ${pages[0]}.`)
+  for (const page of pages) {
+    const hit = await ctx.sources.resolve({ sourceId: source.id, page, quote, occurrence })
+    if (hit) return { sourceId: source.id, page, quote: hit.text, occurrence }
   }
+  return fail(`${label}: "${quote.slice(0, 60)}${quote.length > 60 ? '…' : ''}" does not appear in ${source.name}${int(c, 'page') ? ` on page ${int(c, 'page')}` : ''}.`, 'Copy the passage from read_source, or find it with search_sources.')
+}
+
+async function resolveCitations(ctx: ToolContext, raw: unknown): Promise<Citation[] | ToolResult> {
+  const list = arr(raw) ?? []
+  const out: Citation[] = []
+  for (const [i, item] of list.entries()) {
+    const c = await resolveCitation(ctx, item, `citation ${i + 1}`)
+    if ('ok' in c) return c
+    out.push(c)
+  }
+  return out
+}
+
+function stringList(v: unknown): string[] | undefined {
+  const a = arr(v)
+  return a && a.every((x) => typeof x === 'string') ? (a as string[]) : undefined
+}
+
+/** Builds typed content from what the agent sent, or explains the expected shape. */
+async function parseContent(ctx: ToolContext, type: string, raw: unknown, base?: BlockContent): Promise<BlockContent | ToolResult> {
+  const c = obj(raw) ?? {}
+  const shape = (t: BlockContent['type']) => fail(`"content" for a ${t} is ${CONTENT_SHAPES[t]}.`)
+  switch (type) {
+    case 'heading': {
+      const text = str(c, 'text') ?? (base?.type === 'heading' ? base.text : undefined)
+      if (text === undefined) return shape('heading')
+      const level = int(c, 'level') ?? (base?.type === 'heading' ? base.level : 2)
+      if (![1, 2, 3].includes(level)) return fail('"level" must be 1, 2 or 3.')
+      return { type: 'heading', text, level: level as 1 | 2 | 3 }
+    }
+    case 'paragraph': {
+      const text = str(c, 'text') ?? (base?.type === 'paragraph' ? base.text : undefined)
+      if (text === undefined) return shape('paragraph')
+      return { type: 'paragraph', text }
+    }
+    case 'callout': {
+      const body = str(c, 'body') ?? (base?.type === 'callout' ? base.body : undefined)
+      if (body === undefined) return shape('callout')
+      const tone = str(c, 'tone') ?? (base?.type === 'callout' ? base.tone : 'idea')
+      if (!['idea', 'example', 'warning', 'why'].includes(tone)) return fail(`"${tone}" is not a tone.`, 'Tones: idea, example, warning, why.')
+      return { type: 'callout', title: str(c, 'title') ?? (base?.type === 'callout' ? base.title : ''), body, tone: tone as 'idea' }
+    }
+    case 'diagram': {
+      const rawNodes = arr(c.nodes)
+      if (!rawNodes && base?.type === 'diagram') return { ...base, title: str(c, 'title') ?? base.title }
+      if (!rawNodes || rawNodes.length === 0) return shape('diagram')
+      const nodes: DiagramNode[] = []
+      for (const [i, n] of rawNodes.entries()) {
+        const node = obj(n)
+        const label = node && str(node, 'label')
+        if (!label) return fail(`Node ${i + 1} needs a label.`, CONTENT_SHAPES.diagram)
+        let citation: Citation | undefined
+        if (node.citation !== undefined) {
+          const r = await resolveCitation(ctx, node.citation, `node ${i + 1}`)
+          if ('ok' in r) return r
+          citation = r
+        }
+        nodes.push({ id: newId('n'), label, ...(citation ? { citation } : {}) })
+      }
+      const ref = (v: unknown) => (typeof v === 'number' ? nodes[v - 1] : typeof v === 'string' ? nodes.find((n) => n.label.toLowerCase() === v.toLowerCase()) : undefined)
+      const rawEdges = arr(c.edges)
+      let edges: DiagramEdge[]
+      if (rawEdges && rawEdges.length) {
+        edges = []
+        for (const [i, e] of rawEdges.entries()) {
+          const edge = obj(e)
+          const from = edge && ref(edge.from)
+          const to = edge && ref(edge.to)
+          if (!from || !to) return fail(`Edge ${i + 1} refers to a node that does not exist.`, `Nodes: ${nodes.map((n, k) => `${k + 1} "${n.label}"`).join(', ')}.`)
+          edges.push({ from: from.id, to: to.id, ...(edge && str(edge, 'label') ? { label: str(edge, 'label') } : {}) })
+        }
+      } else {
+        edges = nodes.slice(1).map((n, i) => ({ from: nodes[i].id, to: n.id }))
+      }
+      return { type: 'diagram', title: str(c, 'title') ?? (base?.type === 'diagram' ? base.title : ''), nodes, edges }
+    }
+    case 'comparison': {
+      const columns = stringList(c.columns) ?? (base?.type === 'comparison' ? base.columns : undefined)
+      const rawRows = arr(c.rows)
+      const rows = rawRows
+        ? rawRows.map((r) => {
+            const row = obj(r)
+            return { label: (row && str(row, 'label')) ?? '', cells: (row && stringList(row.cells)) ?? [] }
+          })
+        : base?.type === 'comparison'
+          ? base.rows
+          : undefined
+      if (!columns || !rows || columns.length === 0) return shape('comparison')
+      return { type: 'comparison', title: str(c, 'title') ?? (base?.type === 'comparison' ? base.title : ''), columns, rows: rows.map((r) => ({ label: r.label, cells: columns.map((_, j) => r.cells[j] ?? '') })) }
+    }
+    case 'flashcards': {
+      const rawCards = arr(c.cards)
+      if (!rawCards && base?.type === 'flashcards') return base
+      if (!rawCards || rawCards.length === 0) return shape('flashcards')
+      const cards = []
+      for (const [i, k] of rawCards.entries()) {
+        const card = obj(k)
+        const question = card && str(card, 'question')
+        const answer = card && str(card, 'answer')
+        if (!question || !answer) return fail(`Card ${i + 1} needs a question and an answer.`, CONTENT_SHAPES.flashcards)
+        let citation: Citation | undefined
+        if (card.citation !== undefined) {
+          const r = await resolveCitation(ctx, card.citation, `card ${i + 1}`)
+          if ('ok' in r) return r
+          citation = r
+        }
+        cards.push({ id: newId('c'), question, answer, ...(citation ? { citation } : {}) })
+      }
+      return { type: 'flashcards', cards }
+    }
+    case 'quiz': {
+      const rawQs = arr(c.questions)
+      if (!rawQs && base?.type === 'quiz') return base
+      if (!rawQs || rawQs.length === 0) return shape('quiz')
+      const questions = []
+      for (const [i, q] of rawQs.entries()) {
+        const question = obj(q)
+        const prompt = question && str(question, 'prompt')
+        const options = question && stringList(question.options)
+        if (!prompt || !options || options.length < 2) return fail(`Question ${i + 1} needs a prompt and at least two options.`, CONTENT_SHAPES.quiz)
+        const rawAnswer = question.answer
+        const answer = typeof rawAnswer === 'number' ? rawAnswer - 1 : typeof rawAnswer === 'string' ? options.findIndex((o) => o.toLowerCase() === rawAnswer.toLowerCase()) : -1
+        if (answer < 0 || answer >= options.length) return fail(`Question ${i + 1}: "answer" must be the 1-based position of the right option or its text.`, `Options: ${options.map((o, k) => `${k + 1} "${o}"`).join(', ')}.`)
+        questions.push({ id: newId('q'), prompt, options, answer, ...(str(question, 'explanation') ? { explanation: str(question, 'explanation') } : {}) })
+      }
+      return { type: 'quiz', questions }
+    }
+    case 'image': {
+      const ref = str(c, 'source') ?? str(c, 'source_id')
+      if (!ref && base?.type === 'image') return { ...base, caption: str(c, 'caption') ?? base.caption }
+      const source = sourceOf(ctx, ref)
+      if ('ok' in source) return source
+      if (source.kind !== 'image') return fail(`${source.name} is a ${source.kind}; an image block needs an image source.`)
+      return { type: 'image', sourceId: source.id, caption: str(c, 'caption') ?? (base?.type === 'image' ? base.caption : '') }
+    }
+    default:
+      return fail(`"${type}" is not a block type.`, `Types: ${BLOCK_TYPES.join(', ')}.`)
+  }
+}
+
+/** The passages the user gathered, when a tool asks for them; clears the basket once used. */
+function takeCollected(ctx: ToolContext, input: Obj): Citation[] {
+  if (input.use_collected !== true) return []
+  const collected = ctx.ws.getState().collected
+  if (collected.length) ctx.ws.stopCollecting()
+  return collected
+}
+
+function parsePosition(raw: unknown): Position | ToolResult {
+  if (raw === undefined || raw === 'end') return 'end'
+  if (raw === 'start') return 'start'
+  const p = obj(raw)
+  if (p) {
+    if (str(p, 'after')) return { after: str(p, 'after')! }
+    if (str(p, 'before')) return { before: str(p, 'before')! }
+    if (str(p, 'in_section')) return { inSection: str(p, 'in_section')! }
+  }
+  return fail('"position" is not valid.', positionSchema.description)
+}
+
+function describeCitation(ctx: ToolContext, c: Citation) {
+  const s = ctx.sources.byId(c.sourceId)
+  return { source_id: c.sourceId, source: s?.name ?? 'removed', ...(c.page ? { page: c.page } : {}), ...(c.quote ? { quote: c.quote } : {}) }
+}
+
+function describeBlock(ctx: ToolContext, block: Block, full: boolean) {
+  return {
+    id: block.id,
+    type: block.content.type,
+    ...(full ? { content: block.content } : { excerpt: blockExcerpt(block, 160) }),
+    citations: citationsOf(block).map((c) => describeCitation(ctx, c)),
+    ...(block.note ? { note: block.note } : {}),
+    by: block.by,
+  }
+}
+
+function blockOf(ctx: ToolContext, id: string | undefined): Block | ToolResult {
+  const block = id ? ctx.ws.blockById(id) : undefined
+  if (!block) return fail(`There is no block "${id ?? ''}".`, 'Ids come from get_workspace.')
+  return block
 }
 
 export const TOOLS: ToolDef[] = [
   {
-    name: 'get_reading_state',
-    title: 'Where the reader is',
-    description: 'Returns the open document, the page in view, the zoom, the text the user has selected, and how many augmentations exist.',
+    name: 'list_sources',
+    title: 'List the sources',
+    description: 'Lists the sources in the workspace: id, name, kind (pdf, text, image), pages, size, and how many blocks cite each one.',
     inputSchema: { type: 'object', properties: {} },
     annotations: { readOnlyHint: true },
     execute: async (_input, ctx) => {
-      const selection = anchorFromSelection(window.getSelection(), ctx.ws.scale)
-      const items = ctx.aug.getState().items
-      const cards = items.filter(hasCard)
-      return {
-        ok: true,
-        summary: `"${ctx.doc.title}", ${ctx.doc.pageCount} pages, page ${ctx.ws.currentPage} in view.`,
-        title: ctx.doc.title,
-        file_name: ctx.doc.fileName,
-        page_count: ctx.doc.pageCount,
-        current_page: ctx.ws.currentPage,
-        zoom_percent: Math.round(ctx.ws.scale * 100),
-        selection: selection.ok ? { page: selection.anchor.page, text: selection.anchor.text } : null,
-        augmentations: { total: items.length, cards_shown: cards.filter((c) => !c.folded).length, cards_in_text: cards.filter((c) => c.folded).length },
-      }
+      const blocks = ctx.ws.getState().blocks
+      const list = ctx.sources.sources.map((s) => ({
+        id: s.id,
+        name: s.name,
+        ...(s.title ? { title: s.title } : {}),
+        kind: s.kind,
+        ...(s.kind === 'pdf' ? { pages: s.pages } : {}),
+        bytes: s.bytes,
+        cited_by: blocks.filter((b) => citationsOf(b).some((c) => c.sourceId === s.id)).length,
+      }))
+      return { ok: true, summary: list.length ? `${list.length} source(s): ${list.map((s) => s.name).join(', ')}.` : 'No sources yet; the user adds them from the left panel.', sources: list }
     },
   },
   {
-    name: 'get_page_text',
-    title: 'Read a page',
-    description: 'Returns the full text of one page in reading order. Quote from it to anchor highlights, notes, rewrites, folds and flashcards.',
-    inputSchema: { type: 'object', properties: { page: pageParam }, required: ['page'] },
-    annotations: { readOnlyHint: true, untrustedContentHint: true },
-    execute: async (input, ctx) => {
-      const page = checkPage(ctx, int(input, 'page'))
-      if (typeof page !== 'number') return page
-      const index = await ctx.index(page)
-      return { ok: true, summary: `Page ${page}: ${index.text.length} characters.`, page, text: index.text }
-    },
-  },
-  {
-    name: 'find_in_document',
-    title: 'Find a passage',
-    description: 'Finds every occurrence of a phrase in the document, or on one page, with the page number and surrounding text.',
+    name: 'search_sources',
+    title: 'Search the sources',
+    description: 'Finds a phrase across the PDF and text sources (or some of them) and returns hits ready to cite: source, page, occurrence, the exact passage and its surroundings.',
     inputSchema: {
       type: 'object',
-      properties: { query: { type: 'string', description: 'Words to look for; case, spacing and hyphenation are ignored.' }, page: { ...pageParam, description: 'Restrict the search to this page.' } },
+      properties: {
+        query: { type: 'string', description: 'Words to look for; case, spacing and hyphenation are ignored.' },
+        sources: { type: 'array', items: sourceParam, description: 'Restrict the search to these sources.' },
+        limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Defaults to 30.' },
+      },
       required: ['query'],
     },
     annotations: { readOnlyHint: true, untrustedContentHint: true },
     execute: async (input, ctx) => {
       const query = str(input, 'query')
       if (!query) return fail('"query" is required.')
-      const only = int(input, 'page')
-      if (only !== undefined) {
-        const check = checkPage(ctx, only)
-        if (typeof check !== 'number') return check
+      let ids: string[] | undefined
+      if (arr(input.sources)) {
+        ids = []
+        for (const ref of arr(input.sources)!) {
+          const s = sourceOf(ctx, typeof ref === 'string' ? ref : undefined)
+          if ('ok' in s) return s
+          ids.push(s.id)
+        }
       }
-      const pages = only !== undefined ? [only] : Array.from({ length: ctx.doc.pageCount }, (_, i) => i + 1)
-      const results: { page: number; occurrence: number; snippet: string }[] = []
-      for (const page of pages) {
-        const index = await ctx.index(page)
-        findInPage(index, query).forEach((m, i) => {
-          if (results.length >= 50) return
-          const from = Math.max(0, m.start - 60)
-          const to = Math.min(index.text.length, m.end + 60)
-          results.push({ page, occurrence: i + 1, snippet: index.text.slice(from, to).replace(/\s+/g, ' ') })
-        })
-        if (results.length >= 50) break
+      const hits = await ctx.sources.search(query, ids, int(input, 'limit') ?? 30)
+      return {
+        ok: true,
+        summary: hits.length ? `${hits.length} hit(s) for "${query}".` : `"${query}" does not appear in the sources.`,
+        hits: hits.map((h) => ({ source_id: h.sourceId, source: ctx.sources.byId(h.sourceId)?.name, page: h.page, occurrence: h.occurrence, quote: h.quote, snippet: h.snippet })),
       }
-      return { ok: true, summary: results.length ? `${results.length} match(es) for "${query}".` : `"${query}" does not appear in the document.`, matches: results }
     },
   },
   {
-    name: 'list_augmentations',
-    title: 'List what is on the document',
-    description: 'Lists the highlights, notes, rewrites, folds, diagrams and flashcards that exist, with their ids, pages and quoted passages.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        page: { ...pageParam, description: 'Only augmentations anchored on this page.' },
-        type: { type: 'string', enum: ['highlight', 'note', 'rewrite', 'fold', 'diagram', 'flashcard'] },
-      },
+    name: 'read_source',
+    title: 'Read a source',
+    description: 'Returns the text of one page of a PDF, the whole text of a text source, or an image as a data URL. Quote from it to cite.',
+    inputSchema: { type: 'object', properties: { source: sourceParam, page: { ...pageParam, description: 'PDF page to read. Defaults to 1.' } }, required: ['source'] },
+    annotations: { readOnlyHint: true, untrustedContentHint: true },
+    execute: async (input, ctx) => {
+      const source = sourceOf(ctx, str(input, 'source'))
+      if ('ok' in source) return source
+      if (source.kind === 'image') {
+        const data_url = await ctx.sources.imageDataUrl(source.id)
+        return { ok: true, summary: `${source.name}: image.`, source_id: source.id, kind: 'image', data_url }
+      }
+      const page = int(input, 'page') ?? 1
+      const count = ctx.sources.pageCount(source.id)
+      if (page < 1 || page > count) return fail(`${source.name} has ${count} page(s); there is no page ${page}.`)
+      const index = await ctx.sources.index(source.id, page)
+      return { ok: true, summary: `${source.name}${source.kind === 'pdf' ? ` page ${page} of ${count}` : ''}: ${index.text.length} characters.`, source_id: source.id, kind: source.kind, page, page_count: count, text: index.text }
     },
+  },
+  {
+    name: 'get_selection',
+    title: "What the user is pointing at",
+    description: 'Returns the selected block (id, type, content, citations), any text selected in the document, and any text selected in an open source.',
+    inputSchema: { type: 'object', properties: {} },
+    annotations: { readOnlyHint: true },
+    execute: async (_input, ctx) => {
+      const state = ctx.ws.getState()
+      const block = state.selectedBlockId ? ctx.ws.blockById(state.selectedBlockId) : undefined
+      const sel = window.getSelection()
+      const text = sel && !sel.isCollapsed ? sel.toString().replace(/\s+/g, ' ').trim() : ''
+      const node = sel?.anchorNode instanceof Element ? sel.anchorNode : sel?.anchorNode?.parentElement
+      const inDocument = !!node?.closest('.document')
+      const sheet = node?.closest<HTMLElement>('.sheet')
+      const inText = !!node?.closest('.text-source')
+      const sourceSelection = text && state.viewer && (sheet || inText) ? { source_id: state.viewer.sourceId, source: ctx.sources.byId(state.viewer.sourceId)?.name, page: sheet ? Number(sheet.dataset.pageNumber) : 1, text } : null
+      return {
+        ok: true,
+        summary: [
+          block ? `${block.content.type} ${block.id} is selected${text ? ' with text highlighted' : ''}.` : text ? 'Text is selected but no block.' : 'Nothing is selected.',
+          state.collecting ? ` The user has gathered ${state.collected.length} passage(s)${state.collectTarget ? ` for block ${state.collectTarget}` : ''} — pass use_collected: true to add_block or link_sources to use them.` : '',
+        ].join(''),
+        block: block ? describeBlock(ctx, block, true) : null,
+        collecting: state.collecting ? { passages: state.collected.map((c) => describeCitation(ctx, c)), target_block_id: state.collectTarget } : null,
+        selected_text: inDocument && text ? text : null,
+        source_selection: sourceSelection,
+        open_source: state.viewer ? { source_id: state.viewer.sourceId, page: state.viewer.page } : null,
+      }
+    },
+  },
+  {
+    name: 'get_workspace',
+    title: 'Read the knowledge space',
+    description: 'Returns the title, the sources, every block in order (id, type, excerpt or full content, citations, note), the quiz answers so far and which sections are covered.',
+    inputSchema: { type: 'object', properties: { include_content: { type: 'boolean', description: 'Return full block content instead of excerpts. Defaults to false.' } } },
     annotations: { readOnlyHint: true },
     execute: async (input, ctx) => {
-      const page = int(input, 'page')
+      const state = ctx.ws.getState()
+      const full = input.include_content === true
+      const quiz = state.blocks.filter((b) => b.content.type === 'quiz').flatMap((b) => (b.content.type === 'quiz' ? b.content.questions : [])).map((q) => ({ question_id: q.id, prompt: q.prompt, answered: state.quizAnswers[q.id] !== undefined, correct: state.quizAnswers[q.id] === undefined ? null : state.quizAnswers[q.id] === q.answer }))
+      return {
+        ok: true,
+        summary: `"${state.title}": ${state.blocks.length} block(s) from ${ctx.sources.sources.length} source(s).${state.collecting ? ` The user has gathered ${state.collected.length} passage(s) (see get_selection).` : ''}`,
+        title: state.title,
+        sources: ctx.sources.sources.map((s) => ({ id: s.id, name: s.name, kind: s.kind })),
+        blocks: state.blocks.map((b) => describeBlock(ctx, b, full)),
+        sections: sections(state.blocks, state.quizAnswers).map((s) => ({ heading_id: s.headingId, title: s.title, blocks: s.blockCount, status: s.status })),
+        quiz: quiz,
+        selected_block_id: state.selectedBlockId,
+        history: { can_undo: state.past.length, can_redo: state.future.length },
+      }
+    },
+  },
+  {
+    name: 'add_block',
+    title: 'Add a block to the document',
+    description: `Adds a block and shows it at once. "content" depends on "type": ${Object.entries(CONTENT_SHAPES)
+      .map(([t, s]) => `${t}: ${s}`)
+      .join('; ')}. Cite the sources the block draws on; a paragraph marks where each citation applies with [1], [2]… in its text.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        type: { type: 'string', enum: BLOCK_TYPES },
+        content: { type: 'object', description: 'Shape depends on type; see the tool description.' },
+        position: positionSchema,
+        citations: { type: 'array', items: citationSchema, description: 'Sources this block draws on, in the order the [n] marks refer to.' },
+        use_collected: { type: 'boolean', description: 'Also cite the passages the user gathered (get_selection → collecting), before the ones listed here. Clears the basket.' },
+        note: { type: 'string', description: 'Why this block exists, in one or two sentences; shown to the user in the context panel.' },
+      },
+      required: ['type', 'content'],
+    },
+    execute: async (input, ctx) => {
       const type = str(input, 'type')
-      const items = ctx.aug.getState().items.filter((i) => (type ? i.type === type : true)).filter((i) => (page ? (i.type === 'fold' ? i.page === page : anchorsOf(i).some((a) => a.page === page)) : true))
-      return { ok: true, summary: `${items.length} augmentation(s).`, augmentations: items.map(describe) }
+      if (!type) return fail('"type" is required.', `Types: ${BLOCK_TYPES.join(', ')}.`)
+      const content = await parseContent(ctx, type, input.content)
+      if ('ok' in content) return content
+      const listed = await resolveCitations(ctx, input.citations)
+      if ('ok' in listed) return listed
+      const position = parsePosition(input.position)
+      if (typeof position === 'object' && 'ok' in position) return position
+      const probe = ctx.ws.getState().blocks
+      const idx = insertIndex(probe, position)
+      if (typeof idx !== 'number') return fail(idx.error, 'Ids come from get_workspace.')
+      const citations = [...takeCollected(ctx, input), ...listed]
+      const block = ctx.ws.addBlock({ content, citations, note: str(input, 'note'), by: 'agent' }, position)
+      if (content.type === 'paragraph') ctx.ws.updateBlock(block.id, ensureMarks)
+      const after = ctx.ws.blockById(block.id)!
+      return { ok: true, summary: `Added ${type} ${block.id}${citations.length ? ` citing ${citations.length} passage(s)` : ''}.`, block: describeBlock(ctx, after, false) }
     },
   },
   {
-    name: 'highlight',
-    title: 'Highlight a passage',
-    description: 'Marks a quoted passage with a semantic colour. With a note, a card with that note appears next to the passage, tied to it by a thread.',
+    name: 'update_block',
+    title: 'Change a block',
+    description: 'Changes the content, citations or note of an existing block. Content fields you leave out stay as they are; for diagram, comparison, flashcards and quiz a given collection replaces the old one.',
     inputSchema: {
       type: 'object',
-      properties: {
-        page: pageParam,
-        quote: quoteParam,
-        kind: { type: 'string', enum: HIGHLIGHT_KIND_VALUES, description: 'What the passage is. Defaults to "claim".' },
-        note: { type: 'string', description: 'A short explanation to attach as a card.' },
-        occurrence: occurrenceParam,
-      },
-      required: ['page', 'quote'],
+      properties: { block_id: { type: 'string' }, content: { type: 'object', description: 'Same shape as add_block for the block\'s type; partial.' }, citations: { type: 'array', items: citationSchema, description: 'Replaces the block\'s citations.' }, note: { type: 'string' } },
+      required: ['block_id'],
     },
     execute: async (input, ctx) => {
-      const anchor = await resolveQuote(ctx, input)
-      if ('ok' in anchor) return anchor
-      const kind = (str(input, 'kind') ?? 'claim') as Kind
-      if (!HIGHLIGHT_KIND_VALUES.includes(kind)) return fail(`"${kind}" is not a highlight kind.`, `Valid kinds: ${HIGHLIGHT_KIND_VALUES.join(', ')}.`)
+      const block = blockOf(ctx, str(input, 'block_id'))
+      if ('ok' in block) return block
+      let content = block.content
+      if (input.content !== undefined) {
+        const parsed = await parseContent(ctx, block.content.type, input.content, block.content)
+        if ('ok' in parsed) return parsed
+        content = parsed
+      }
+      let citations = block.citations
+      if (input.citations !== undefined) {
+        const parsed = await resolveCitations(ctx, input.citations)
+        if ('ok' in parsed) return parsed
+        citations = parsed
+      }
       const note = str(input, 'note')
-      const item = ctx.aug.add({ type: 'highlight', kind, anchor, ...(note ? { note } : {}) })
-      return { ok: true, summary: `Highlighted "${anchor.text.slice(0, 60)}…" on page ${anchor.page} as ${kind}${note ? ' with a note' : ''}.`, id: item.id }
+      if (content === block.content && citations === block.citations && note === undefined) return fail('Nothing to change.', 'Pass content, citations or note.')
+      ctx.ws.updateBlock(block.id, (b) => ({ ...b, content, citations, ...(note !== undefined ? { note } : {}) }))
+      return { ok: true, summary: `Updated ${block.content.type} ${block.id}.`, block: describeBlock(ctx, ctx.ws.blockById(block.id)!, false) }
     },
   },
   {
-    name: 'create_note',
-    title: 'Create a note citing passages',
-    description: 'Creates a note card that cites one or more passages, possibly on different pages. Each citation is listed on the card and jumps back to its source.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        title: { type: 'string' },
-        body: { type: 'string', description: 'The note itself.' },
-        citations: { type: 'array', minItems: 1, items: { type: 'object', properties: { page: pageParam, quote: quoteParam, occurrence: occurrenceParam }, required: ['page', 'quote'] } },
-      },
-      required: ['body', 'citations'],
-    },
+    name: 'remove_block',
+    title: 'Delete blocks',
+    description: 'Deletes one or more blocks from the document. undo brings them back.',
+    inputSchema: { type: 'object', properties: { block_ids: { type: 'array', items: { type: 'string' }, minItems: 1 } }, required: ['block_ids'] },
     execute: async (input, ctx) => {
-      const body = str(input, 'body')
-      if (!body) return fail('"body" is required.')
-      const citations = Array.isArray(input.citations) ? (input.citations as Record<string, unknown>[]) : []
-      if (citations.length === 0) return fail('At least one citation is required.', 'Each citation is { page, quote }.')
-      const anchors: Anchor[] = []
-      for (const [n, c] of citations.entries()) {
-        const anchor = await resolveQuote(ctx, c)
-        if ('ok' in anchor) return { ...anchor, error: `Citation ${n + 1}: ${anchor.error}` }
-        anchors.push(anchor)
-      }
-      const item = ctx.aug.add({ type: 'note', kind: 'synthesis', title: str(input, 'title') ?? '', body, anchors })
-      return { ok: true, summary: `Note created citing ${anchors.length} passage(s) on page(s) ${[...new Set(anchors.map((a) => a.page))].join(', ')}.`, id: item.id }
+      const ids = stringList(input.block_ids)
+      if (!ids || ids.length === 0) return fail('"block_ids" must list at least one id.')
+      const missing = ids.filter((id) => !ctx.ws.blockById(id))
+      if (missing.length) return fail(`There is no block ${missing.join(', ')}.`, 'Ids come from get_workspace.')
+      ctx.ws.removeBlocks(ids)
+      return { ok: true, summary: `Deleted ${ids.length} block(s). Use undo to restore them.`, removed: ids }
     },
   },
   {
-    name: 'rewrite_passage',
-    title: 'Rewrite a passage in place',
-    description: 'Replaces a quoted passage with new text set in the flow of the page; the page reflows around it. The original is kept and the user can flip back to it at any time.',
-    inputSchema: { type: 'object', properties: { page: pageParam, quote: quoteParam, text: { type: 'string', description: 'The replacement text.' }, occurrence: occurrenceParam }, required: ['page', 'quote', 'text'] },
+    name: 'move_block',
+    title: 'Move a block',
+    description: 'Moves a block to another position in the document.',
+    inputSchema: { type: 'object', properties: { block_id: { type: 'string' }, position: positionSchema }, required: ['block_id', 'position'] },
     execute: async (input, ctx) => {
-      const anchor = await resolveQuote(ctx, input)
-      if ('ok' in anchor) return anchor
-      const text = str(input, 'text')
-      if (!text) return fail('"text" is required.')
-      const item = ctx.aug.add({ type: 'rewrite', anchor, text, showRewrite: true })
-      return { ok: true, summary: `Rewrote "${anchor.text.slice(0, 60)}…" on page ${anchor.page}.`, id: item.id }
+      const block = blockOf(ctx, str(input, 'block_id'))
+      if ('ok' in block) return block
+      const position = parsePosition(input.position)
+      if (typeof position === 'object' && 'ok' in position) return position
+      const idx = insertIndex(ctx.ws.getState().blocks, position, block.id)
+      if (typeof idx !== 'number') return fail(idx.error, 'Ids come from get_workspace.')
+      ctx.ws.moveBlock(block.id, position)
+      return { ok: true, summary: `Moved ${block.content.type} ${block.id}.`, index: ctx.ws.getState().blocks.findIndex((b) => b.id === block.id) }
     },
   },
   {
-    name: 'fold_section',
-    title: 'Collapse a section',
-    description: 'Collapses the vertical span of the page from one quoted passage to another (or the quoted passage alone) into a strip; the page shrinks. The user can expand it again.',
-    inputSchema: {
-      type: 'object',
-      properties: { page: pageParam, quote: { ...quoteParam, description: 'Where the section starts (or the whole passage to fold).' }, end_quote: { ...quoteParam, description: 'Where the section ends, if different from the start.' }, occurrence: occurrenceParam },
-      required: ['page', 'quote'],
-    },
+    name: 'focus_block',
+    title: 'Bring the user to a block',
+    description: 'Selects a block, scrolls the document to it and flashes it, so the user sees what you are talking about.',
+    inputSchema: { type: 'object', properties: { block_id: { type: 'string' } }, required: ['block_id'] },
     execute: async (input, ctx) => {
-      const start = await resolveQuote(ctx, input)
-      if ('ok' in start) return start
-      let y0 = unionRect(start.rects).y
-      let y1 = y0 + unionRect(start.rects).h
-      if (str(input, 'end_quote')) {
-        const end = await resolveQuote(ctx, { ...input, occurrence: undefined }, 'end_quote')
-        if ('ok' in end) return end
-        const box = unionRect(end.rects)
-        y1 = Math.max(y1, box.y + box.h)
-        y0 = Math.min(y0, box.y)
-      }
-      const item = ctx.aug.add({ type: 'fold', page: start.page, y0: y0 - 2, y1: y1 + 2, collapsed: true })
-      return { ok: true, summary: `Folded ${Math.round(y1 - y0)} pt of page ${start.page}.`, id: item.id }
+      const block = blockOf(ctx, str(input, 'block_id'))
+      if ('ok' in block) return block
+      ctx.ws.focusBlock(block.id)
+      return { ok: true, summary: `Focused ${block.content.type} ${block.id}.` }
     },
   },
   {
-    name: 'create_flashcard',
-    title: 'Create a flashcard',
-    description: 'Creates a question/answer flashcard anchored to a quoted passage. The answer defaults to the passage itself.',
-    inputSchema: { type: 'object', properties: { page: pageParam, quote: quoteParam, question: { type: 'string' }, answer: { type: 'string' }, occurrence: occurrenceParam }, required: ['page', 'quote', 'question'] },
+    name: 'open_source',
+    title: 'Open a source for the user',
+    description: 'Opens a source in the viewer beside the document, at a page or at a quoted passage, which is marked.',
+    inputSchema: { type: 'object', properties: { source: sourceParam, page: pageParam, quote: quoteParam, occurrence: { type: 'integer', minimum: 1 } }, required: ['source'] },
     execute: async (input, ctx) => {
-      const anchor = await resolveQuote(ctx, input)
-      if ('ok' in anchor) return anchor
-      const question = str(input, 'question')
-      if (!question) return fail('"question" is required.')
-      const item = ctx.aug.add({ type: 'flashcard', anchor, question, answer: str(input, 'answer') ?? anchor.text })
-      return { ok: true, summary: `Flashcard created on page ${anchor.page}: "${question}".`, id: item.id }
-    },
-  },
-  {
-    name: 'create_diagram',
-    title: 'Create a diagram of anchored nodes',
-    description: 'Creates a diagram whose nodes each point at a quoted passage. Without edges the nodes form a chain in the order given.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        title: { type: 'string' },
-        nodes: { type: 'array', minItems: 1, items: { type: 'object', properties: { label: { type: 'string' }, page: pageParam, quote: quoteParam, occurrence: occurrenceParam }, required: ['label', 'page', 'quote'] } },
-        edges: {
-          type: 'array',
-          description: 'Optional. Refer to nodes by their 1-based position or by label.',
-          items: { type: 'object', properties: { from: { type: ['integer', 'string'] }, to: { type: ['integer', 'string'] }, label: { type: 'string' } }, required: ['from', 'to'] },
-        },
-      },
-      required: ['nodes'],
-    },
-    execute: async (input, ctx) => {
-      const rawNodes = Array.isArray(input.nodes) ? (input.nodes as Record<string, unknown>[]) : []
-      if (rawNodes.length === 0) return fail('At least one node is required.', 'Each node is { label, page, quote }.')
-      const nodes: DiagramNode[] = []
-      for (const [n, raw] of rawNodes.entries()) {
-        const label = str(raw, 'label')
-        if (!label) return fail(`Node ${n + 1} has no label.`)
-        const anchor = await resolveQuote(ctx, raw)
-        if ('ok' in anchor) return { ...anchor, error: `Node ${n + 1}: ${anchor.error}` }
-        nodes.push({ id: newId('node'), label, anchor })
-      }
-      const ref = (v: unknown): DiagramNode | undefined => {
-        if (typeof v === 'number') return nodes[v - 1]
-        if (typeof v === 'string') return nodes.find((n) => n.label.toLowerCase() === v.toLowerCase())
-        return undefined
-      }
-      let edges: DiagramEdge[]
-      if (Array.isArray(input.edges) && input.edges.length > 0) {
-        edges = []
-        for (const [n, raw] of (input.edges as Record<string, unknown>[]).entries()) {
-          const from = ref(raw.from)
-          const to = ref(raw.to)
-          if (!from || !to) return fail(`Edge ${n + 1} refers to a node that does not exist.`, `Nodes: ${nodes.map((x, i) => `${i + 1} "${x.label}"`).join(', ')}.`)
-          edges.push({ from: from.id, to: to.id, ...(str(raw, 'label') ? { label: str(raw, 'label') } : {}) })
-        }
-      } else {
-        edges = nodes.slice(1).map((node, i) => ({ from: nodes[i].id, to: node.id }))
-      }
-      const item = ctx.aug.add({ type: 'diagram', title: str(input, 'title') ?? '', nodes, edges })
-      return { ok: true, summary: `Diagram with ${nodes.length} node(s) and ${edges.length} edge(s) created.`, id: item.id }
-    },
-  },
-  {
-    name: 'edit_augmentation',
-    title: 'Edit the text of an augmentation',
-    description: 'Changes the text fields of an existing augmentation: the note of a highlight, the title or body of a note, the text of a rewrite, the question or answer of a flashcard, the title of a diagram.',
-    inputSchema: {
-      type: 'object',
-      properties: { id: { type: 'string' }, note: { type: 'string' }, title: { type: 'string' }, body: { type: 'string' }, text: { type: 'string' }, question: { type: 'string' }, answer: { type: 'string' } },
-      required: ['id'],
-    },
-    execute: async (input, ctx) => {
-      const id = str(input, 'id')
-      const item = id ? ctx.aug.byId(id) : undefined
-      if (!item) return fail(`There is no augmentation "${id ?? ''}".`, 'Ids come from list_augmentations.')
-      const fields = ['note', 'title', 'body', 'text', 'question', 'answer'].filter((k) => typeof input[k] === 'string')
-      const applicable: Record<Augmentation['type'], string[]> = { highlight: ['note'], note: ['title', 'body'], rewrite: ['text'], flashcard: ['question', 'answer'], diagram: ['title'], fold: [] }
-      const applied = fields.filter((k) => applicable[item.type].includes(k))
-      if (applied.length === 0) return fail(`Nothing to change on a ${item.type}.`, `A ${item.type} accepts: ${applicable[item.type].join(', ') || 'no text fields'}.`)
-      ctx.aug.update(item.id, (i) => ({ ...i, ...Object.fromEntries(applied.map((k) => [k, input[k]])) }) as Augmentation)
-      return { ok: true, summary: `Updated ${applied.join(', ')} of ${item.type} ${item.id}.`, id: item.id }
-    },
-  },
-  {
-    name: 'modify_augmentation',
-    title: 'Change the state of an augmentation',
-    description: 'Removes an augmentation, shows or hides its card, collapses or expands a fold, or flips a rewrite between the rewritten and original text.',
-    inputSchema: {
-      type: 'object',
-      properties: { id: { type: 'string' }, action: { type: 'string', enum: ['remove', 'show_card', 'hide_card', 'collapse', 'expand', 'show_rewrite', 'show_original'] } },
-      required: ['id', 'action'],
-    },
-    execute: async (input, ctx) => {
-      const id = str(input, 'id')
-      const item = id ? ctx.aug.byId(id) : undefined
-      if (!item) return fail(`There is no augmentation "${id ?? ''}".`, 'Ids come from list_augmentations.')
-      const action = str(input, 'action')
-      switch (action) {
-        case 'remove':
-          ctx.aug.remove(item.id)
-          return { ok: true, summary: `Removed ${item.type} ${item.id}.` }
-        case 'show_card':
-        case 'hide_card': {
-          if (!hasCard(item)) return fail(`A ${item.type} has no card.`)
-          const wantFolded = action === 'hide_card'
-          ctx.aug.setFolded(item.id, wantFolded)
-          return { ok: true, summary: `${wantFolded ? 'Hid' : 'Showed'} the card of ${item.id}.` }
-        }
-        case 'collapse':
-        case 'expand': {
-          if (item.type !== 'fold') return fail(`Only folds collapse; ${item.id} is a ${item.type}.`)
-          const want = action === 'collapse'
-          ctx.aug.setCollapsed(item.id, want)
-          return { ok: true, summary: `${want ? 'Collapsed' : 'Expanded'} the fold on page ${item.page}.` }
-        }
-        case 'show_rewrite':
-        case 'show_original': {
-          if (item.type !== 'rewrite') return fail(`Only rewrites flip; ${item.id} is a ${item.type}.`)
-          const want = action === 'show_rewrite'
-          ctx.aug.setShowRewrite(item.id, want)
-          return { ok: true, summary: `Now showing the ${want ? 'rewrite' : 'original'} on page ${item.anchor.page}.` }
-        }
-        default:
-          return fail(`"${action ?? ''}" is not an action.`, 'Valid actions: remove, show_card, hide_card, collapse, expand, show_rewrite, show_original.')
-      }
-    },
-  },
-  {
-    name: 'go_to',
-    title: 'Bring the reader to a place',
-    description: 'Scrolls the reader to a page, to a quoted passage on it, or to an existing augmentation, and flashes a halo there.',
-    inputSchema: {
-      type: 'object',
-      properties: { page: pageParam, quote: quoteParam, occurrence: occurrenceParam, augmentation_id: { type: 'string' } },
-    },
-    execute: async (input, ctx) => {
-      const id = str(input, 'augmentation_id')
-      if (id) {
-        const item = ctx.aug.byId(id)
-        if (!item) return fail(`There is no augmentation "${id}".`)
-        const anchor = anchorsOf(item)[0]
-        if (anchor) ctx.ws.jumpTo(anchor)
-        else if (item.type === 'fold') ctx.ws.scrollToPage(item.page, item.y0)
-        ctx.aug.select(item.id)
-        return { ok: true, summary: `Jumped to ${item.type} ${item.id}.` }
-      }
+      const source = sourceOf(ctx, str(input, 'source'))
+      if ('ok' in source) return source
       if (str(input, 'quote')) {
-        const anchor = await resolveQuote(ctx, input)
-        if ('ok' in anchor) return anchor
-        ctx.ws.jumpTo(anchor)
-        return { ok: true, summary: `Jumped to "${anchor.text.slice(0, 60)}" on page ${anchor.page}.` }
+        const citation = await resolveCitation(ctx, { ...input, source: source.id }, 'quote')
+        if ('ok' in citation) return citation
+        ctx.ws.openViewer({ sourceId: source.id, page: citation.page, citation })
+        return { ok: true, summary: `Opened ${source.name} at page ${citation.page}, on "${(citation.quote ?? '').slice(0, 50)}".` }
       }
-      const page = checkPage(ctx, int(input, 'page'))
-      if (typeof page !== 'number') return fail('Give a page, a quote or an augmentation_id.')
-      ctx.ws.scrollToPage(page, 0)
-      return { ok: true, summary: `Scrolled to page ${page}.` }
+      const page = int(input, 'page')
+      if (page && page > ctx.sources.pageCount(source.id)) return fail(`${source.name} has ${ctx.sources.pageCount(source.id)} page(s).`)
+      ctx.ws.openViewer({ sourceId: source.id, page })
+      return { ok: true, summary: `Opened ${source.name}${page ? ` at page ${page}` : ''}.` }
+    },
+  },
+  {
+    name: 'highlight_source',
+    title: 'Highlight a passage in a PDF',
+    description: 'Leaves a persistent coloured wash on a quoted passage of a PDF source, with an optional note. Visible whenever that source is open.',
+    inputSchema: {
+      type: 'object',
+      properties: { source: sourceParam, page: pageParam, quote: quoteParam, occurrence: { type: 'integer', minimum: 1 }, kind: { type: 'string', enum: HIGHLIGHT_KINDS, description: 'What the passage is. Defaults to "claim".' }, note: { type: 'string' } },
+      required: ['source', 'quote'],
+    },
+    execute: async (input, ctx) => {
+      const source = sourceOf(ctx, str(input, 'source'))
+      if ('ok' in source) return source
+      if (source.kind !== 'pdf') return fail(`Only PDFs take highlights; ${source.name} is a ${source.kind}.`, 'Cite the passage in a block instead.')
+      const citation = await resolveCitation(ctx, { ...input, source: source.id }, 'quote')
+      if ('ok' in citation) return citation
+      const resolved = await ctx.sources.resolve(citation)
+      if (!resolved) return fail('The passage could not be placed on the page.')
+      const kind = (str(input, 'kind') ?? 'claim') as HighlightKind
+      if (!HIGHLIGHT_KINDS.includes(kind)) return fail(`"${kind}" is not a kind.`, `Kinds: ${HIGHLIGHT_KINDS.join(', ')}.`)
+      const h = ctx.ws.addHighlight({ sourceId: source.id, page: resolved.page, rects: resolved.rects, text: resolved.text, kind, ...(str(input, 'note') ? { note: str(input, 'note') } : {}) })
+      return { ok: true, summary: `Highlighted "${resolved.text.slice(0, 50)}…" on page ${resolved.page} of ${source.name} as ${kind}.`, id: h.id, page: resolved.page }
     },
   },
 ]
+
+TOOLS.push({
+    name: 'link_sources',
+    title: 'Link passages to a block',
+    description: 'Attaches passages from the sources to an existing block, keeping what it already cites: the ones listed and/or the ones the user gathered. A paragraph gets a [n] mark per passage at the end of its text unless you place the marks yourself with update_block.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        block_id: { type: 'string', description: 'Defaults to the block the user started collecting for, if any.' },
+        passages: { type: 'array', items: citationSchema },
+        use_collected: { type: 'boolean', description: 'Link the passages the user gathered (get_selection → collecting). Clears the basket.' },
+      },
+    },
+    execute: async (input, ctx) => {
+      const block = blockOf(ctx, str(input, 'block_id') ?? ctx.ws.getState().collectTarget ?? undefined)
+      if ('ok' in block) return block
+      const listed = await resolveCitations(ctx, input.passages)
+      if ('ok' in listed) return listed
+      const citations = [...takeCollected(ctx, input), ...listed]
+      if (citations.length === 0) return fail('Nothing to link.', 'List passages ({ source, page?, quote? }) or pass use_collected: true.')
+      ctx.ws.linkSources(block.id, citations)
+      const after = ctx.ws.blockById(block.id)!
+      return { ok: true, summary: `Linked ${citations.length} passage(s) to ${block.content.type} ${block.id}; it now cites ${after.citations.length}.`, block: describeBlock(ctx, after, false) }
+    },
+  })
+
+/** What changed between two snapshots, in words an agent can act on. */
+function diffSummary(before: Block[], after: Block[]) {
+  const a = new Map(before.map((b) => [b.id, b]))
+  const b = new Map(after.map((x) => [x.id, x]))
+  const label = (x: Block) => `${x.content.type} ${x.id}`
+  return {
+    restored: after.filter((x) => !a.has(x.id)).map(label),
+    removed: before.filter((x) => !b.has(x.id)).map(label),
+    changed: after.filter((x) => a.has(x.id) && a.get(x.id) !== x).map(label),
+  }
+}
+
+for (const dir of ['undo', 'redo'] as const) {
+  TOOLS.push({
+    name: dir,
+    title: dir === 'undo' ? 'Undo the last change' : 'Redo an undone change',
+    description: dir === 'undo' ? 'Takes back the most recent change to the document or highlights — or several with steps — and reports what came back.' : 'Re-applies changes taken back with undo, one or several with steps.',
+    inputSchema: { type: 'object', properties: { steps: { type: 'integer', minimum: 1, description: 'How many changes. Defaults to 1.' } } },
+    execute: async (input, ctx) => {
+      const steps = int(input, 'steps') ?? 1
+      const before = ctx.ws.getState().blocks
+      let done = 0
+      while (done < steps && (dir === 'undo' ? ctx.ws.undo() : ctx.ws.redo())) done++
+      if (done === 0) return fail(`There is nothing to ${dir}.`)
+      const diff = diffSummary(before, ctx.ws.getState().blocks)
+      const parts = [diff.restored.length && `restored ${diff.restored.join(', ')}`, diff.removed.length && `removed ${diff.removed.join(', ')}`, diff.changed.length && `reverted ${diff.changed.join(', ')}`].filter(Boolean)
+      const state = ctx.ws.getState()
+      return { ok: true, summary: `${dir === 'undo' ? 'Undid' : 'Redid'} ${done} change(s)${parts.length ? ': ' + parts.join('; ') : ''}.`, steps: done, ...diff, can_undo: state.past.length, can_redo: state.future.length }
+    },
+  })
+}
 
 /** Runs one tool by name; unknown names and thrown errors come back as data. */
 export async function runTool(name: string, input: unknown, ctx: ToolContext | null): Promise<ToolResult> {
   const tool = TOOLS.find((t) => t.name === name)
   if (!tool) return fail(`There is no tool "${name}".`, `Tools: ${TOOLS.map((t) => t.name).join(', ')}.`)
-  if (!ctx) return fail('No document is open.', 'Open a PDF in the reader first.')
+  if (!ctx) return fail('The workspace is not ready yet.')
   try {
-    const args = input && typeof input === 'object' ? (input as Record<string, unknown>) : {}
-    return await tool.execute(args, ctx)
+    return await tool.execute(obj(input) ?? {}, ctx)
   } catch (err: unknown) {
     return fail(err instanceof Error ? err.message : String(err), `Tool: ${name}.`)
   }

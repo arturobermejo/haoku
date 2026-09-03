@@ -1,21 +1,19 @@
 import { useEffect, useRef } from 'react'
-import { useAugmentations } from '../augment/store'
-import { useWorkspace } from '../components/workspaceContext'
-import type { PdfDoc } from '../pdf/types'
+import { useSources } from '../workspace/sources'
+import { useWorkspace } from '../workspace/store'
 import type { ToolContext } from './catalog'
-import { indexPage } from './textIndex'
 import { bridge, register, setToolContext, unregister } from './webmcp'
 
-/** Mounts inside the workspace: keeps the tools pointed at the live reader and registers them with WebMCP. */
-export function ToolsBridge({ doc }: { doc: PdfDoc }) {
-  const aug = useAugmentations()
+/** Keeps the tools pointed at the live workspace and registers them with WebMCP. */
+export function ToolsBridge() {
   const ws = useWorkspace()
+  const sources = useSources()
   const ctx = useRef<ToolContext | null>(null)
 
   useEffect(() => {
-    ctx.current = { doc, aug, ws, index: (page) => indexPage(doc.proxy, page) }
+    ctx.current = { ws, sources }
     setToolContext(ctx.current)
-  }, [doc, aug, ws])
+  }, [ws, sources])
 
   useEffect(() => {
     window.saoku = bridge
@@ -24,7 +22,7 @@ export function ToolsBridge({ doc }: { doc: PdfDoc }) {
       unregister()
       setToolContext(null)
     }
-  }, [doc])
+  }, [])
 
   return null
 }

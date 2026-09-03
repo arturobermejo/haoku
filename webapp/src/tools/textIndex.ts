@@ -5,8 +5,15 @@
  * not.
  */
 import type { PDFDocumentProxy } from 'pdfjs-dist'
-import { mergeLines } from '../augment/selection'
-import type { Anchor, Rect } from '../augment/types'
+import { mergeLines } from '../workspace/rect'
+import type { Rect } from '../workspace/types'
+
+/** A resolved passage: where it sits on its page. */
+export interface Anchor {
+  page: number
+  rects: Rect[]
+  text: string
+}
 
 export interface IndexedRun {
   str: string
@@ -173,4 +180,19 @@ export function rectsForRange(index: PageIndex, start: number, end: number): Rec
 
 export function anchorForMatch(index: PageIndex, match: Match): Anchor {
   return { page: match.page, rects: rectsForRange(index, match.start, match.end), text: match.text.replace(/\s+/g, ' ').trim() }
+}
+
+/** Nominal geometry for plain-text sources, so the same search and anchoring work on them. */
+const TEXT_LINE = 14
+
+/** Indexes a plain-text source as a single page; one run per line, with nominal rects. */
+export function buildPlainIndex(text: string): PageIndex {
+  const runs: IndexedRun[] = []
+  let offset = 0
+  text.split('\n').forEach((line, i) => {
+    if (line.length > 0) runs.push({ str: line, start: offset, end: offset + line.length, rect: { x: 0, y: i * TEXT_LINE, w: line.length * 6, h: TEXT_LINE - 2 }, horizontal: true })
+    offset += line.length + 1
+  })
+  const { norm, map } = normalise(text)
+  return { page: 1, text, runs, norm, map }
 }

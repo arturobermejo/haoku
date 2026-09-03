@@ -1,0 +1,68 @@
+.tool-badge {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: var(--z-dock);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 13px 7px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: var(--shadow-dock);
+  pointer-events: none;
+  animation: appear var(--dur-appear) var(--ease) both;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.tool-badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--link);
+}
+.tool-badge--running .tool-badge-dot {
+  animation: tool-badge-pulse 1.1s ease-in-out infinite;
+}
+.tool-badge--done .tool-badge-dot {
+  background: var(--kind-evidence);
+}
+.tool-badge--failed .tool-badge-dot {
+  background: var(--kind-question);
+}
+
+.tool-badge-label {
+  color: var(--ink-25);
+}
+.tool-badge-name {
+  color: var(--ink);
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-size: 11px;
+}
+.tool-badge-state {
+  color: var(--ink-45);
+}
+.tool-badge--failed .tool-badge-state {
+  color: var(--kind-question);
+}
+
+@keyframes tool-badge-pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.35);
+  }
+}
