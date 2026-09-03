@@ -7,7 +7,7 @@ import { useWorkspace } from '../workspace/store'
 import type { Citation, Position } from '../workspace/types'
 import { BlockBody } from './blocks/BlockBody'
 import { EditableText } from './EditableText'
-import { CollectTray } from './CollectTray'
+import { FromSourcesButton, FromSourcesTray } from './FromSources'
 import './Document.css'
 import './blocks/blocks.css'
 
@@ -19,7 +19,7 @@ export function Document() {
   const ws = useWorkspace()
   const { byId } = useSources()
   const [now, setNow] = useState(() => Date.now())
-  const [menuOpen, setMenuOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState<'block' | 'sources' | null>(null)
   const [autoEditId, setAutoEditId] = useState<string | null>(null)
   // Which gap between blocks has its insert menu open: the id of the block above, or 'start'.
   const [gapOpen, setGapOpen] = useState<string | null>(null)
@@ -127,7 +127,7 @@ export function Document() {
   // the document once some text is committed. Elements can be empty, so they go in at once.
   const [draft, setDraft] = useState<{ kind: 'heading' | 'paragraph'; position: Position } | null>(null)
   const addManual = (data: BlockData, position: Position = 'end') => {
-    setMenuOpen(false)
+    setMenuOpen(null)
     setGapOpen(null)
     if (data.kind === 'heading' || data.kind === 'paragraph') {
       setDraft({ kind: data.kind, position })
@@ -225,11 +225,6 @@ export function Document() {
                   <button type="button" title="move down" disabled={index === ws.blocks.length - 1} onClick={() => ws.moveBlock(block.id, index === ws.blocks.length - 1 ? 'end' : { after: ws.blocks[index + 1].id })}>
                     ↓
                   </button>
-                  {block.kind !== 'heading' && (
-                    <button type="button" className={ws.collectTarget === block.id ? 'is-on' : ''} title="gather passages from the sources for this block" onClick={() => (ws.collectTarget === block.id ? ws.stopCollecting() : ws.startCollecting(block.id))}>
-                      ⚲
-                    </button>
-                  )}
                   <button type="button" title="remove" onClick={() => ws.removeBlocks([block.id])}>
                     ×
                   </button>
@@ -243,15 +238,13 @@ export function Document() {
         {!ws.rawView && draftAt('end')}
         {!ws.rawView && (
           <>
-            <CollectTray />
+            {menuOpen === 'sources' && <FromSourcesTray onClose={() => setMenuOpen(null)} />}
             <div className="document-add">
-              <button type="button" className={`control${ws.collecting ? '' : ' control--primary'}`} title="gather passages from the sources, then turn them into a block" onClick={() => (ws.collecting ? ws.stopCollecting() : ws.startCollecting())}>
-                {ws.collecting ? 'stop collecting' : '+ from sources'}
-              </button>
-              <button type="button" className="control" onClick={() => setMenuOpen((v) => !v)}>
+              <FromSourcesButton open={menuOpen === 'sources'} onToggle={() => setMenuOpen((v) => (v === 'sources' ? null : 'sources'))} />
+              <button type="button" className="control" onClick={() => setMenuOpen((v) => (v === 'block' ? null : 'block'))}>
                 + block
               </button>
-              {menuOpen && (
+              {menuOpen === 'block' && (
                 <div className="document-add-menu">
                   <button type="button" className="control" onClick={() => addManual({ kind: 'heading', text: '', level: 2 })}>
                     heading

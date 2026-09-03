@@ -101,3 +101,17 @@
   font-size: 9.5px;
   color: var(--ink-45);
 }
+
+.viewer-gathered {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: var(--radius-marker);
+  border: 1px solid var(--border);
+  background: var(--summary);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-70);
+  white-space: nowrap;
+}
