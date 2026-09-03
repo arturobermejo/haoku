@@ -4,8 +4,32 @@
     {
       "name": "haoku",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "webapp", "--", "--strictPort", "--port", "5173"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--prefix",
+        "webapp",
+        "--",
+        "--strictPort",
+        "--port",
+        "5173"
+      ],
       "port": 5173
+    },
+    {
+      "name": "haoku-cf",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "--prefix",
+        "webapp",
+        "wrangler",
+        "dev",
+        "--config",
+        "webapp/wrangler.jsonc",
+        "--port",
+        "8787"
+      ],
+      "port": 8787
     }
   ]
 }
