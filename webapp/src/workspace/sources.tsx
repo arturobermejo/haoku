@@ -30,6 +30,10 @@ export interface SourcesApi {
   /** Finds a source by id, exact name, or a unique name prefix (case-insensitive). */
   byRef: (ref: string) => Source | undefined
   add: (files: File[]) => Promise<{ added: Source[]; rejected: { name: string; reason: string }[] }>
+  /** Restores sources from an export, keeping their ids when free; returns old id → new id. */
+  addImported: (entries: { meta: Source; blob: Blob }[]) => Promise<Map<string, string>>
+  /** The stored file of a source. */
+  blob: (id: string) => Blob | undefined
   remove: (id: string) => Promise<void>
   pdf: (id: string) => Promise<PdfDoc>
   text: (id: string) => Promise<string>
@@ -133,6 +137,26 @@ export function SourcesProvider({ children }: { children: ReactNode }) {
     return { added, rejected }
   }, [])
 
+  const addImported = useCallback<SourcesApi['addImported']>(async (entries) => {
+    const map = new Map<string, string>()
+    const added: Source[] = []
+    for (const { meta, blob } of entries) {
+      const existing = sources.find((s) => s.id === meta.id)
+      if (existing && existing.name === meta.name && existing.bytes === meta.bytes) {
+        map.set(meta.id, meta.id)
+        continue
+      }
+      const id = existing ? newId('s') : meta.id
+      const next: Source = { ...meta, id, addedAt: Date.now() }
+      blobs.current.set(id, blob)
+      await putStoredSource(next, blob)
+      added.push(next)
+      map.set(meta.id, id)
+    }
+    if (added.length) setSources((prev) => [...prev, ...added])
+    return map
+  }, [sources])
+
   const remove = useCallback(async (id: string) => {
     const doc = pdfs.current.get(id)
     if (doc) doc.then(closeDocument).catch(() => {})
@@ -155,6 +179,7 @@ export function SourcesProvider({ children }: { children: ReactNode }) {
       const prefix = sources.filter((s) => s.name.toLowerCase().startsWith(ref.toLowerCase()) || (s.title ?? '').toLowerCase().startsWith(ref.toLowerCase()))
       return prefix.length === 1 ? prefix[0] : undefined
     }
+    const blob = (id: string) => blobs.current.get(id)
     const imageUrl = (id: string) => {
       const blob = blobs.current.get(id)
       if (!blob) return undefined
@@ -228,8 +253,8 @@ export function SourcesProvider({ children }: { children: ReactNode }) {
       const anchor = anchorForMatch(idx, match)
       return { ...anchor, sourceId: citation.sourceId, start: match.start, end: match.end }
     }
-    return { sources, loaded, byId, byRef, add, remove, pdf, text, imageUrl, imageDataUrl, index, pageCount, search, resolve }
-  }, [sources, loaded, add, remove, pdf, text])
+    return { sources, loaded, byId, byRef, add, addImported, blob, remove, pdf, text, imageUrl, imageDataUrl, index, pageCount, search, resolve }
+  }, [sources, loaded, add, addImported, remove, pdf, text])
 
   return <Context.Provider value={api}>{children}</Context.Provider>
 }

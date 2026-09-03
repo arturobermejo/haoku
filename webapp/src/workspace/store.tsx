@@ -32,6 +32,7 @@ interface State extends Snapshot {
 type Action =
   | { type: 'load'; doc: WorkspaceDoc | null }
   | { type: 'setTitle'; title: string }
+  | { type: 'replace'; doc: WorkspaceDoc }
   | { type: 'addBlock'; block: Block; position: Position }
   | { type: 'updateBlock'; id: string; updater: (block: Block) => Block }
   | { type: 'removeBlocks'; ids: string[] }
@@ -91,6 +92,8 @@ function apply(state: State, action: Action): State {
       return { ...initial, loaded: true, ...(action.doc ? { title: action.doc.title, blocks: action.doc.blocks, highlights: action.doc.highlights, quizAnswers: action.doc.quizAnswers ?? {} } : {}) }
     case 'setTitle':
       return { ...state, title: action.title }
+    case 'replace':
+      return { ...state, title: action.doc.title, blocks: action.doc.blocks, highlights: action.doc.highlights, quizAnswers: action.doc.quizAnswers ?? {}, revealed: {}, selectedBlockId: null, collecting: false, collected: [], collectTarget: null, viewer: null }
     case 'addBlock': {
       const at = insertIndex(state.blocks, action.position)
       if (typeof at !== 'number') return state
@@ -164,6 +167,8 @@ export interface NewBlock {
 
 export interface WorkspaceApi extends State {
   setTitle: (title: string) => void
+  /** Swaps the whole document (import); one undo step. */
+  replaceDoc: (doc: WorkspaceDoc) => void
   addBlock: (block: NewBlock, position?: Position) => Block
   updateBlock: (id: string, updater: (block: Block) => Block) => void
   removeBlocks: (ids: string[]) => void
@@ -234,6 +239,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     () => ({
       ...state,
       setTitle: (t) => dispatch({ type: 'setTitle', title: t }),
+      replaceDoc: (doc) => dispatch({ type: 'replace', doc }),
       addBlock: (partial, position = 'end') => {
         const now = Date.now()
         const block: Block = { id: newId('b'), content: partial.content, citations: partial.citations ?? [], by: partial.by ?? 'user', createdAt: now, updatedAt: now, ...(partial.note ? { note: partial.note } : {}) }
