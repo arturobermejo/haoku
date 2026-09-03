@@ -1,5 +1,3 @@
-import { sections } from '../workspace/coverage'
-import { blockExcerpt, blockTitle } from '../workspace/markdown/excerpt'
 import { useSources } from '../workspace/sources'
 import { useWorkspace } from '../workspace/store'
 import './ContextPanel.css'
@@ -10,8 +8,6 @@ export function ContextPanel() {
   const sourcesApi = useSources()
   const block = ws.selectedBlockId ? ws.blocks.find((b) => b.id === ws.selectedBlockId) : undefined
   const cites = block ? ws.citationsOf(block) : []
-  const covered = sections(ws.blocks, ws.quizAnswers)
-  const meta = block ? ws.blockMeta[block.id] : undefined
 
   return (
     <aside className="panel panel--right context-panel scroll">
@@ -22,18 +18,9 @@ export function ContextPanel() {
 
       {block ? (
         <>
-          <div className="context-card">
-            <div className="context-card-title">{blockTitle(block)}</div>
-            {block.kind !== 'heading' && <div className="context-card-body">{blockExcerpt(block, 220)}</div>}
-            <div className="context-card-meta">
-              {meta?.by === 'agent' ? 'added by the agent' : 'written by you'}
-              {meta ? ` · ${new Date(meta.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
-            </div>
-          </div>
-
           <div className="panel-label context-section">{cites.some((c) => c.quote) ? `passages this ${block.kind} draws on` : 'sources'}</div>
           {cites.length === 0 ? (
-            <div className="context-empty">no source cited</div>
+            <div className="context-empty">this {block.kind} cites no source yet</div>
           ) : (
             <div className="context-sources">
               {cites.map((c, i) => {
@@ -59,14 +46,7 @@ export function ContextPanel() {
           )}
         </>
       ) : (
-        <div className="context-card">
-          <div className="context-card-title">{ws.title}</div>
-          <div className="context-card-body">
-            {sourcesApi.sources.length} source{sourcesApi.sources.length === 1 ? '' : 's'} · {ws.blocks.length} block{ws.blocks.length === 1 ? '' : 's'}
-            {covered.length > 0 && ` · ${covered.filter((s) => s.status === 'done').length}/${covered.length} sections covered`}
-          </div>
-          <div className="context-card-meta">select a block to see where it comes from</div>
-        </div>
+        <div className="context-empty">select a block to see the passages it draws on</div>
       )}
     </aside>
   )
