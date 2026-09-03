@@ -33,7 +33,7 @@ Haoku has no chat box. It exposes its own UI as **tools over [WebMCP](https://gi
 and the agent you already use in your browser drives it: it reads your sources, writes into the
 sheet, opens a PDF at the page it is talking about, and adds practice questions.
 
-On load the app registers 18 tools on `document.modelContext` (falling back to the deprecated
+On load the app registers 19 tools on `document.modelContext` (falling back to the deprecated
 `navigator.modelContext`), and the `webmcp` chip in the top bar turns on with the count. WebMCP
 needs a secure context, so HTTPS or localhost.
 
@@ -41,15 +41,17 @@ needs a secure context, so HTTPS or localhost.
 |---|---|
 | Sources | `list_sources`, `search_sources`, `read_source`, `open_source`, `highlight_source` |
 | The sheet | `get_workspace`, `add_block`, `update_block`, `remove_block`, `move_block`, `focus_block`, `link_sources` |
-| The user | `get_selection` — the selected block, the text under the cursor, the open source, the gathered passages |
+| The user | `get_selection` — the selected block, the text under the cursor, the open source · `list_context` — the gathered passages, free ones apart from the ones the document already cites |
 | Practice | `add_practice`, `list_practice`, `remove_practice` |
 | History | `undo`, `redo` |
 
-Two things shape the catalog:
+Three things shape the catalog:
 
 - **A tool cannot invent a citation.** Every passage an agent cites is resolved against the stored
   file: the quote has to be there, and the tool answers with the page and the exact text it matched,
   or with an error explaining what to fix. Nothing reaches the document unattributed.
+- **Each passage backs one block.** What the user gathered in the context is what a new block is
+  built from, and it is used by default; a passage another block already cites is refused.
 - **Errors are data.** A failing call returns `{ ok: false, error, hint }` with the shapes and ids
   the agent got wrong, so it can correct itself instead of guessing.
 
