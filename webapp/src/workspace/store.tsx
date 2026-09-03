@@ -33,6 +33,7 @@ type Action =
   | { type: 'load'; doc: WorkspaceDoc | null }
   | { type: 'setTitle'; title: string }
   | { type: 'replace'; doc: WorkspaceDoc }
+  | { type: 'reset' }
   | { type: 'addBlock'; block: Block; position: Position }
   | { type: 'updateBlock'; id: string; updater: (block: Block) => Block }
   | { type: 'removeBlocks'; ids: string[] }
@@ -70,7 +71,7 @@ const initial: State = {
 }
 
 const HISTORY_LIMIT = 100
-const VIEW_ACTIONS = new Set<Action['type']>(['load', 'answerQuiz', 'reveal', 'select', 'startCollecting', 'stopCollecting', 'collect', 'uncollect', 'focus', 'openViewer', 'closeViewer', 'undo', 'redo'])
+const VIEW_ACTIONS = new Set<Action['type']>(['load', 'reset', 'answerQuiz', 'reveal', 'select', 'startCollecting', 'stopCollecting', 'collect', 'uncollect', 'focus', 'openViewer', 'closeViewer', 'undo', 'redo'])
 
 const snapshot = (s: State): Snapshot => ({ title: s.title, blocks: s.blocks, highlights: s.highlights })
 
@@ -92,6 +93,8 @@ function apply(state: State, action: Action): State {
       return { ...initial, loaded: true, ...(action.doc ? { title: action.doc.title, blocks: action.doc.blocks, highlights: action.doc.highlights, quizAnswers: action.doc.quizAnswers ?? {} } : {}) }
     case 'setTitle':
       return { ...state, title: action.title }
+    case 'reset':
+      return { ...initial, loaded: true }
     case 'replace':
       return { ...state, title: action.doc.title, blocks: action.doc.blocks, highlights: action.doc.highlights, quizAnswers: action.doc.quizAnswers ?? {}, revealed: {}, selectedBlockId: null, collecting: false, collected: [], collectTarget: null, viewer: null }
     case 'addBlock': {
@@ -169,6 +172,8 @@ export interface WorkspaceApi extends State {
   setTitle: (title: string) => void
   /** Swaps the whole document (import); one undo step. */
   replaceDoc: (doc: WorkspaceDoc) => void
+  /** Back to an empty space; clears the history too. */
+  reset: () => void
   addBlock: (block: NewBlock, position?: Position) => Block
   updateBlock: (id: string, updater: (block: Block) => Block) => void
   removeBlocks: (ids: string[]) => void
@@ -240,6 +245,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       ...state,
       setTitle: (t) => dispatch({ type: 'setTitle', title: t }),
       replaceDoc: (doc) => dispatch({ type: 'replace', doc }),
+      reset: () => dispatch({ type: 'reset' }),
       addBlock: (partial, position = 'end') => {
         const now = Date.now()
         const block: Block = { id: newId('b'), content: partial.content, citations: partial.citations ?? [], by: partial.by ?? 'user', createdAt: now, updatedAt: now, ...(partial.note ? { note: partial.note } : {}) }

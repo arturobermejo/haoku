@@ -125,3 +125,11 @@
   letter-spacing: 0.06em;
   color: var(--ink-45);
 }
+.topbar-menu-rule {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--line);
+}
+.topbar-menu-list button.topbar-menu-danger:not(:disabled) {
+  color: var(--kind-question, #b7594f);
+}

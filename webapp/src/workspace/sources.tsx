@@ -35,6 +35,8 @@ export interface SourcesApi {
   /** The stored file of a source. */
   blob: (id: string) => Blob | undefined
   remove: (id: string) => Promise<void>
+  /** Removes every source. */
+  clear: () => Promise<void>
   pdf: (id: string) => Promise<PdfDoc>
   text: (id: string) => Promise<string>
   /** Object URL for an image source; stable for the session. */
@@ -171,6 +173,10 @@ export function SourcesProvider({ children }: { children: ReactNode }) {
     await deleteStoredSource(id)
   }, [])
 
+  const clear = useCallback(async () => {
+    await Promise.all(sources.map((s) => remove(s.id)))
+  }, [sources, remove])
+
   const api = useMemo<SourcesApi>(() => {
     const byId = (id: string) => sources.find((s) => s.id === id)
     const byRef = (ref: string) => {
@@ -253,8 +259,8 @@ export function SourcesProvider({ children }: { children: ReactNode }) {
       const anchor = anchorForMatch(idx, match)
       return { ...anchor, sourceId: citation.sourceId, start: match.start, end: match.end }
     }
-    return { sources, loaded, byId, byRef, add, addImported, blob, remove, pdf, text, imageUrl, imageDataUrl, index, pageCount, search, resolve }
-  }, [sources, loaded, add, addImported, remove, pdf, text])
+    return { sources, loaded, byId, byRef, add, addImported, blob, remove, clear, pdf, text, imageUrl, imageDataUrl, index, pageCount, search, resolve }
+  }, [sources, loaded, add, addImported, remove, clear, pdf, text])
 
   return <Context.Provider value={api}>{children}</Context.Provider>
 }
