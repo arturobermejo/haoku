@@ -74,14 +74,12 @@ export interface WorkspaceDoc {
   title: string
   markdown: string
   highlights: Highlight[]
-  /** `${blockId}:${questionIndex}` → picked option. */
-  quizAnswers: Record<string, number>
-  /** Block ids by position, so answers and metadata survive a reload. */
+  /** Block ids by position, so metadata survives a reload. */
   blockIds: string[]
   blockMeta: Record<string, BlockMeta>
-  /** The practice bank: questions and cards outside the document. */
+  /** The practice bank: the multiple-choice questions, outside the document. */
   practice?: PracticeItem[]
-  /** Per practice item (bank items and document questions alike). */
+  /** Per practice item. */
   practiceProgress?: Record<string, PracticeProgress>
 }
 

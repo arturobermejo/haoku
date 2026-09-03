@@ -1,7 +1,6 @@
-import type { ParsedBlock } from './markdown/types'
 import type { Citation, PracticeItem, PracticeProgress } from './types'
 
-/** One question to practise: a bank item or a question lifted from a quiz in the document. */
+/** One question to practise, from the practice bank. */
 export interface DeckItem {
   id: string
   prompt: string
@@ -10,30 +9,12 @@ export interface DeckItem {
   explanation?: string
   citation?: Citation
   topic?: string
-  origin: 'bank' | 'space'
 }
 
-/** Questions from the document's quizzes, keyed so progress survives edits elsewhere. */
-export function deckFromBlocks(blocks: ParsedBlock[], footnotes: Map<string, Citation>): DeckItem[] {
-  const out: DeckItem[] = []
-  let topic: string | undefined
-  for (const b of blocks) {
-    if (b.data.kind === 'heading') topic = b.data.text.replace(/\[\^\w+\]/g, '').trim()
-    if (b.data.kind !== 'quiz') continue
-    const first = b.citationKeys[0]
-    const blockCite = first ? footnotes.get(first) : undefined
-    b.data.questions.forEach((q, i) => out.push({ id: `${b.id}:q${i}`, prompt: q.prompt, options: q.options, answer: q.answer, explanation: q.explanation, citation: blockCite, topic, origin: 'space' }))
-  }
-  return out
-}
-
-export function deckFromBank(items: PracticeItem[]): DeckItem[] {
+/** The deck: every question in the bank that has at least two options. */
+export function buildDeck(bank: PracticeItem[]): DeckItem[] {
   // Items saved by an earlier build (cards without options) are skipped rather than shown broken.
-  return items.filter((it) => Array.isArray(it.options) && it.options.length >= 2).map((it) => ({ id: it.id, prompt: it.prompt, options: it.options, answer: it.answer, explanation: it.explanation, citation: it.citation, topic: it.topic, origin: 'bank' }))
-}
-
-export function buildDeck(blocks: ParsedBlock[], footnotes: Map<string, Citation>, bank: PracticeItem[]): DeckItem[] {
-  return [...deckFromBank(bank), ...deckFromBlocks(blocks, footnotes)]
+  return bank.filter((it) => Array.isArray(it.options) && it.options.length >= 2).map((it) => ({ id: it.id, prompt: it.prompt, options: it.options, answer: it.answer, explanation: it.explanation, citation: it.citation, topic: it.topic }))
 }
 
 /** Questions the learner got wrong more often than right, or never saw, first. */

@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, type ReactNode } from 'react'
 import { newId } from './ids'
-import { blockToMarkdown, citationKeysIn, isLegacyDoc, migrateLegacy, nextKey, parseDocument, reconcileIds, sameCitation, serializeDocument, withCiteMarks, withoutCiteMark, type BlockData, type ParsedBlock } from './markdown'
+import { blockToMarkdown, citationKeysIn, isLegacyDoc, migrateLegacy, nextKey, parseDocument, reconcileIds, retireDoc, sameCitation, serializeDocument, withCiteMarks, withoutCiteMark, type BlockData, type ParsedBlock } from './markdown'
 import { insertIndex } from './position'
 import { useSources } from './sources'
 import { loadWorkspaceDoc, saveWorkspaceDoc } from './storage'
@@ -21,8 +21,6 @@ interface Snapshot {
 
 interface State extends Snapshot {
   loaded: boolean
-  quizAnswers: Record<string, number>
-  revealed: Record<string, boolean>
   blockMeta: Record<string, BlockMeta>
   practice: PracticeItem[]
   practiceProgress: Record<string, PracticeProgress>
@@ -42,8 +40,6 @@ interface DocumentChange {
   footnotes: Map<string, Citation>
   meta?: Record<string, BlockMeta>
   select?: string | null
-  /** Quiz answers / reveals to forget (block ids whose questions changed). */
-  forget?: string[]
 }
 
 type Action =
@@ -54,8 +50,6 @@ type Action =
   | ({ type: 'document' } & DocumentChange)
   | { type: 'addHighlight'; highlight: Highlight }
   | { type: 'removeHighlight'; id: string }
-  | { type: 'answerQuiz'; key: string; option: number }
-  | { type: 'reveal'; key: string; revealed: boolean }
   | { type: 'setRawView'; on: boolean }
   | { type: 'addPractice'; items: PracticeItem[] }
   | { type: 'removePractice'; ids: string[] }
@@ -78,8 +72,6 @@ const initial: State = {
   blocks: [],
   footnotes: new Map(),
   loaded: false,
-  quizAnswers: {},
-  revealed: {},
   blockMeta: {},
   practice: [],
   practiceProgress: {},
@@ -93,13 +85,13 @@ const initial: State = {
 }
 
 const HISTORY_LIMIT = 100
-const VIEW_ACTIONS = new Set<Action['type']>(['load', 'reset', 'answerQuiz', 'reveal', 'setRawView', 'addPractice', 'removePractice', 'gradePractice', 'resetPractice', 'select', 'collect', 'uncollect', 'clearCollected', 'focus', 'openViewer', 'closeViewer', 'undo', 'redo'])
+const VIEW_ACTIONS = new Set<Action['type']>(['load', 'reset', 'setRawView', 'addPractice', 'removePractice', 'gradePractice', 'resetPractice', 'select', 'collect', 'uncollect', 'clearCollected', 'focus', 'openViewer', 'closeViewer', 'undo', 'redo'])
 
 const snapshot = (s: State): Snapshot => ({ title: s.title, markdown: s.markdown, highlights: s.highlights, blocks: s.blocks, footnotes: s.footnotes })
 
-function fromDoc(doc: WorkspaceDoc): Pick<State, 'title' | 'markdown' | 'highlights' | 'blocks' | 'footnotes' | 'quizAnswers' | 'blockMeta' | 'practice' | 'practiceProgress'> {
+function fromDoc(doc: WorkspaceDoc): Pick<State, 'title' | 'markdown' | 'highlights' | 'blocks' | 'footnotes' | 'blockMeta' | 'practice' | 'practiceProgress'> {
   const parsed = parseDocument(doc.markdown, { ids: doc.blockIds })
-  return { title: doc.title, markdown: doc.markdown, highlights: doc.highlights ?? [], blocks: parsed.blocks, footnotes: parsed.footnotes, quizAnswers: doc.quizAnswers ?? {}, blockMeta: doc.blockMeta ?? {}, practice: doc.practice ?? [], practiceProgress: doc.practiceProgress ?? {} }
+  return { title: doc.title, markdown: doc.markdown, highlights: doc.highlights ?? [], blocks: parsed.blocks, footnotes: parsed.footnotes, blockMeta: doc.blockMeta ?? {}, practice: doc.practice ?? [], practiceProgress: doc.practiceProgress ?? {} }
 }
 
 function restore(state: State, snap: Snapshot): State {
@@ -119,22 +111,18 @@ function apply(state: State, action: Action): State {
     case 'load':
       return { ...initial, loaded: true, ...(action.doc ? fromDoc(action.doc) : {}) }
     case 'replace':
-      return { ...state, ...fromDoc(action.doc), revealed: {}, selectedBlockId: null, collected: [], viewer: null, rawView: false }
+      return { ...state, ...fromDoc(action.doc), selectedBlockId: null, collected: [], viewer: null, rawView: false }
     case 'reset':
       return { ...initial, loaded: true }
     case 'setTitle':
       return { ...state, title: action.title }
     case 'document': {
-      const forget = new Set(action.forget ?? [])
-      const drop = (record: Record<string, number> | Record<string, boolean>) => Object.fromEntries(Object.entries(record).filter(([k]) => !forget.has(k.split(':')[0])))
       return {
         ...state,
         markdown: action.markdown,
         blocks: action.blocks,
         footnotes: action.footnotes,
         blockMeta: action.meta ? { ...state.blockMeta, ...action.meta } : state.blockMeta,
-        quizAnswers: forget.size ? (drop(state.quizAnswers) as Record<string, number>) : state.quizAnswers,
-        revealed: forget.size ? (drop(state.revealed) as Record<string, boolean>) : state.revealed,
         selectedBlockId: action.select !== undefined ? action.select : state.selectedBlockId && action.blocks.some((b) => b.id === state.selectedBlockId) ? state.selectedBlockId : null,
       }
     }
@@ -142,10 +130,6 @@ function apply(state: State, action: Action): State {
       return { ...state, highlights: [...state.highlights, action.highlight] }
     case 'removeHighlight':
       return { ...state, highlights: state.highlights.filter((h) => h.id !== action.id) }
-    case 'answerQuiz':
-      return { ...state, quizAnswers: { ...state.quizAnswers, [action.key]: action.option } }
-    case 'reveal':
-      return { ...state, revealed: { ...state.revealed, [action.key]: action.revealed } }
     case 'setRawView':
       return { ...state, rawView: action.on }
     case 'addPractice':
@@ -215,13 +199,11 @@ export interface WorkspaceApi extends State {
   unlinkSource: (id: string, key: string) => void
   addHighlight: (highlight: Omit<Highlight, 'id' | 'createdAt'>) => Highlight
   removeHighlight: (id: string) => void
-  answerQuiz: (blockId: string, questionIndex: number, option: number) => void
-  reveal: (blockId: string, cardIndex: number, revealed: boolean) => void
   setRawView: (on: boolean) => void
   /** Adds questions to the practice bank; returns them with ids. */
   addPractice: (items: Omit<PracticeItem, 'id' | 'createdAt'>[]) => PracticeItem[]
   removePractice: (ids: string[]) => void
-  /** Records an attempt on a bank question or a document quiz question. */
+  /** Records an attempt on a practice question. */
   gradePractice: (id: string, correct: boolean) => void
   resetPractice: () => void
   select: (id: string | null) => void
@@ -263,7 +245,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     loadWorkspaceDoc()
       .then((doc) => {
         if (cancelled) return
-        dispatch({ type: 'load', doc: doc ? (isLegacyDoc(doc) ? migrateLegacy(doc, sourceName) : doc) : null })
+        dispatch({ type: 'load', doc: doc ? (isLegacyDoc(doc) ? migrateLegacy(doc, sourceName) : retireDoc(doc)) : null })
       })
       .catch((err: unknown) => {
         console.error('could not load workspace', err)
@@ -274,15 +256,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
   }, [dispatch, sources.loaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { loaded, title, markdown, highlights, quizAnswers, blocks, blockMeta, practice, practiceProgress } = state
+  const { loaded, title, markdown, highlights, blocks, blockMeta, practice, practiceProgress } = state
   useEffect(() => {
     if (!loaded) return
     const handle = setTimeout(() => {
-      const doc: WorkspaceDoc = { version: 2, title, markdown, highlights, quizAnswers, blockIds: blocks.map((b) => b.id), blockMeta, practice, practiceProgress }
+      const doc: WorkspaceDoc = { version: 2, title, markdown, highlights, blockIds: blocks.map((b) => b.id), blockMeta, practice, practiceProgress }
       saveWorkspaceDoc(doc).catch((err: unknown) => console.error('could not save workspace', err))
     }, SAVE_DELAY)
     return () => clearTimeout(handle)
-  }, [loaded, title, markdown, highlights, quizAnswers, blocks, blockMeta, practice, practiceProgress])
+  }, [loaded, title, markdown, highlights, blocks, blockMeta, practice, practiceProgress])
 
   const api = useMemo<WorkspaceApi>(() => {
     // ---- pure helpers over the latest state ----
@@ -334,9 +316,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       const fresh = chunk(build(raw, keys), id)
       const blocks = [...s.blocks]
       blocks.splice(index, 1, ...fresh)
-      const old = s.blocks[index]
-      const changedShape = fresh[0]?.kind !== old.kind || (old.data.kind === 'quiz' && fresh[0]?.data.kind === 'quiz' && fresh[0].data.questions.length !== old.data.questions.length) || (old.data.kind === 'flashcards' && fresh[0]?.data.kind === 'flashcards' && fresh[0].data.cards.length !== old.data.cards.length)
-      commit(blocks, footnotes, changedShape ? { forget: [id] } : {})
+      commit(blocks, footnotes)
     }
 
     return {
@@ -347,10 +327,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setMarkdown: (md) => {
         const s = latest.current
         const parsed = parseDocument(md)
-        const blocks = reconcileIds(s.blocks, parsed.blocks)
-        const kept = new Set(blocks.map((b) => b.id))
-        const gone = s.blocks.filter((b) => !kept.has(b.id)).map((b) => b.id)
-        commit(blocks, parsed.footnotes, { forget: gone })
+        commit(reconcileIds(s.blocks, parsed.blocks), parsed.footnotes)
       },
       insertBlock,
       replaceBlock,
@@ -358,7 +335,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       removeBlocks: (ids) => {
         const s = latest.current
         const gone = new Set(ids)
-        commit(s.blocks.filter((b) => !gone.has(b.id)), s.footnotes, { forget: ids })
+        commit(s.blocks.filter((b) => !gone.has(b.id)), s.footnotes)
       },
       moveBlock: (id, position) => {
         const s = latest.current
@@ -399,8 +376,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         return highlight
       },
       removeHighlight: (id) => dispatch({ type: 'removeHighlight', id }),
-      answerQuiz: (blockId, questionIndex, option) => dispatch({ type: 'answerQuiz', key: `${blockId}:${questionIndex}`, option }),
-      reveal: (blockId, cardIndex, revealed) => dispatch({ type: 'reveal', key: `${blockId}:${cardIndex}`, revealed }),
       setRawView: (on) => dispatch({ type: 'setRawView', on }),
       addPractice: (partials) => {
         const now = Date.now()
