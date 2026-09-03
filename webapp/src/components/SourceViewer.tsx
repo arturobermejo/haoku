@@ -49,11 +49,11 @@ export function SourceViewer({ target }: { target: ViewerTarget }) {
 
   // Where a cited passage goes: the basket while collecting, else the selected block, else a new paragraph.
   const selected = ws.selectedBlockId ? ws.blockById(ws.selectedBlockId) : undefined
-  const citeLabel = ws.collecting ? 'collect' : selected ? `cite in ${selected.content.type}` : 'cite as paragraph'
+  const citeLabel = ws.collecting ? 'collect' : selected ? `cite in ${selected.kind}` : 'cite as paragraph'
   const cite = (citation: Citation) => {
     if (ws.collecting) ws.collect(citation)
     else if (selected) ws.linkSources(selected.id, [citation])
-    else ws.addBlock({ content: { type: 'paragraph', text: `${citation.quote ?? ''} [1]` }, citations: [citation], by: 'user' }, 'end')
+    else ws.insertBlock((keys) => `${citation.quote ?? ''} [^${keys[0]}]`, 'end', [citation], 'user')
   }
 
   return (

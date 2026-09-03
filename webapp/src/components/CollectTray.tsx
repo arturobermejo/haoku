@@ -1,8 +1,9 @@
-import { ensureMarks } from '../workspace/linking'
-import { newId } from '../workspace/ids'
+import { marks } from '../workspace/markdown/citations'
+import { blockToMarkdown } from '../workspace/markdown/serialize'
+import type { BlockData } from '../workspace/markdown/types'
 import { useSources } from '../workspace/sources'
 import { useWorkspace } from '../workspace/store'
-import type { BlockContent, Citation } from '../workspace/types'
+import type { Citation } from '../workspace/types'
 import './CollectTray.css'
 
 /**
@@ -20,11 +21,20 @@ export function CollectTray() {
   const images = passages.filter((c) => byId(c.sourceId)?.kind === 'image')
   const textual = passages.filter((c) => byId(c.sourceId)?.kind !== 'image')
   const short = (c: Citation) => (c.quote ? (c.quote.length > 60 ? `${c.quote.slice(0, 60)}…` : c.quote) : (byId(c.sourceId)?.name ?? ''))
+  const position = target ? { after: target.id } : selected ? { after: selected.id } : 'end'
 
-  const make = (content: BlockContent, marks = false) => {
-    const position = target ? { after: target.id } : selected ? { after: selected.id } : 'end'
-    const block = ws.addBlock({ content, citations: content.type === 'image' ? [] : passages, by: 'user' }, position)
-    if (marks) ws.updateBlock(block.id, ensureMarks)
+  /** Builds the block once the passages have footnote keys; `keys[i]` belongs to `passages[i]`. */
+  const make = (build: (keys: string[], keyOf: (c: Citation) => string) => BlockData | string) => {
+    ws.insertBlock(
+      (keys) => {
+        const keyOf = (c: Citation) => keys[passages.indexOf(c)]
+        const out = build(keys, keyOf)
+        return typeof out === 'string' ? out : blockToMarkdown(out)
+      },
+      position,
+      passages,
+      'user',
+    )
     ws.stopCollecting()
   }
   const link = () => {
@@ -38,9 +48,7 @@ export function CollectTray() {
   return (
     <div className="tray" onClick={(e) => e.stopPropagation()}>
       <div className="tray-head">
-        <span className="tray-label">
-          {target ? `collecting passages for ${target.content.type}` : 'collecting passages'} · open a source, select text, press “collect”
-        </span>
+        <span className="tray-label">{target ? `collecting passages for ${target.kind}` : 'collecting passages'} · open a source, select text, press “collect”</span>
         <button type="button" className="tray-close" onClick={ws.stopCollecting} title="stop collecting">
           ×
         </button>
@@ -60,7 +68,7 @@ export function CollectTray() {
                   </span>
                   {c.quote && <span className="passage-quote">“{c.quote}”</span>}
                 </button>
-                <button type="button" className="passage-remove" onClick={() => ws.uncollect(i)} title="drop passage">
+                <button type="button" className="passage-remove" onClick={() => ws.uncollect(i)} title="drop this passage">
                   ×
                 </button>
               </div>
@@ -68,39 +76,38 @@ export function CollectTray() {
           })}
         </div>
       ) : (
-        <div className="collecting-empty">nothing gathered yet</div>
+        <div className="tray-empty">nothing gathered yet</div>
       )}
 
       <div className="tray-actions">
-        <span className="tray-actions-label">{target || selected ? 'link to' : 'make'}</span>
-        {(target || selected) && (
+        {(target ?? selected) && (
           <button type="button" className="control control--primary" disabled={!has} onClick={link}>
-            {target?.content.type ?? selected?.content.type}
+            link to {(target ?? selected)!.kind}
           </button>
         )}
-        {(target || selected) && <span className="tray-actions-label">or make</span>}
-        <button type="button" className="control" disabled={!has} onClick={() => make({ type: 'paragraph', text: '' }, true)}>
+        <span className="tray-make">make</span>
+        <button type="button" className="control" disabled={!has} onClick={() => make((keys) => (textual.length ? `${marks(keys.filter((_, i) => byId(passages[i].sourceId)?.kind !== 'image'))}` : ''))}>
           paragraph
         </button>
-        <button type="button" className="control" disabled={!has} onClick={() => make({ type: 'callout', title: '', body: '', tone: 'idea' })}>
+        <button type="button" className="control" disabled={!has} onClick={() => make((keys) => ({ kind: 'callout', tone: 'idea', title: '', body: '', cites: keys }))}>
           callout
         </button>
-        <button type="button" className="control" disabled={!has} onClick={() => make({ type: 'flashcards', cards: textual.map((c) => ({ id: newId('c'), question: '', answer: c.quote ?? '', citation: c })) })}>
+        <button type="button" className="control" disabled={!has} onClick={() => make((_keys, keyOf) => ({ kind: 'flashcards', cards: textual.map((c) => ({ question: '', answer: c.quote ?? '', cite: keyOf(c) })), cites: [] }))}>
           flashcards
         </button>
-        <button type="button" className="control" disabled={!has} onClick={() => make({ type: 'diagram', title: '', nodes: textual.map((c) => ({ id: newId('n'), label: short(c), citation: c })), edges: [] })}>
+        <button type="button" className="control" disabled={!has} onClick={() => make((_keys, keyOf) => ({ kind: 'diagram', title: '', nodes: textual.map((c) => ({ label: short(c), cite: keyOf(c) })), edges: [], cites: [] }))}>
           diagram
         </button>
-        <button type="button" className="control" disabled={!has} onClick={() => make({ type: 'quiz', questions: textual.map((c) => ({ id: newId('q'), prompt: '', options: ['', ''], answer: 0, explanation: c.quote })) })}>
+        <button type="button" className="control" disabled={!has} onClick={() => make((keys) => ({ kind: 'quiz', questions: textual.map((c) => ({ prompt: '', options: ['', ''], answer: 0, explanation: c.quote })), cites: keys }))}>
           quiz
         </button>
         {images.length > 0 && (
-          <button type="button" className="control" onClick={() => make({ type: 'image', sourceId: images[0].sourceId, caption: '' })}>
+          <button type="button" className="control" onClick={() => make(() => ({ kind: 'image', sourceId: images[0].sourceId, caption: '' }))}>
             image
           </button>
         )}
-        <span className="tray-hint">or ask your agent — it sees what you gathered</span>
       </div>
+      <div className="tray-hint">or ask your agent — it sees what you gathered</div>
     </div>
   )
 }

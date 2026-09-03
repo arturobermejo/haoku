@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { useSyncExternalStore } from 'react'
 import { getStatus, subscribeStatus } from '../tools/webmcp'
-import { downloadBlob, exportSpace, fileSlug, importSpace } from '../workspace/exchange'
+import { downloadBlob, exportMarkdown, exportSpace, fileSlug, importSpace } from '../workspace/exchange'
 import { useSources } from '../workspace/sources'
 import { useWorkspace } from '../workspace/store'
 import { ConfirmDialog } from './ConfirmDialog'
@@ -44,14 +44,26 @@ export function TopBar({ showSources, showContext, onToggleSources, onToggleCont
     return () => window.clearTimeout(t)
   }, [notice])
 
+  const currentDoc = () => {
+    const { title, markdown, highlights, quizAnswers, blocks, blockMeta } = ws.getState()
+    return { version: 2 as const, title, markdown, highlights, quizAnswers, blockIds: blocks.map((b) => b.id), blockMeta }
+  }
+
+  const exportMd = () => {
+    setMenu(false)
+    const doc = currentDoc()
+    downloadBlob(new Blob([exportMarkdown(doc, sourcesApi)], { type: 'text/markdown' }), `${fileSlug(doc.title)}.md`)
+    setNotice(`exported ${doc.blockIds.length} blocks as markdown`)
+  }
+
   const exportZip = async () => {
     setMenu(false)
     setBusy('exporting…')
     try {
-      const { title, blocks, highlights, quizAnswers } = ws.getState()
-      const blob = await exportSpace({ title, blocks, highlights, quizAnswers }, sourcesApi)
-      downloadBlob(blob, `${fileSlug(title)}.saoku.zip`)
-      setNotice(`exported ${blocks.length} blocks and ${sources.length} sources`)
+      const doc = currentDoc()
+      const blob = await exportSpace(doc, sourcesApi)
+      downloadBlob(blob, `${fileSlug(doc.title)}.saoku.zip`)
+      setNotice(`exported ${doc.blockIds.length} blocks and ${sources.length} sources`)
     } catch (err: unknown) {
       setNotice(err instanceof Error ? err.message : 'export failed')
     } finally {
@@ -78,7 +90,7 @@ export function TopBar({ showSources, showContext, onToggleSources, onToggleCont
     try {
       const { doc, sources: s } = await importSpace(file, sourcesApi)
       ws.replaceDoc(doc)
-      setNotice(`imported ${doc.blocks.length} blocks · ${s.added} sources added${s.reused ? `, ${s.reused} already here` : ''}`)
+      setNotice(`imported ${doc.blockIds.length} blocks · ${s.added} sources added${s.reused ? `, ${s.reused} already here` : ''}`)
     } catch (err: unknown) {
       setNotice(err instanceof Error ? err.message : 'import failed')
     } finally {
@@ -131,6 +143,10 @@ export function TopBar({ showSources, showContext, onToggleSources, onToggleCont
               <span>pdf</span>
               <span className="topbar-menu-hint">the document, via print</span>
             </button>
+            <button type="button" role="menuitem" onClick={exportMd} disabled={ws.blocks.length === 0}>
+              <span>markdown · .md</span>
+              <span className="topbar-menu-hint">the document, footnotes renumbered</span>
+            </button>
             <button type="button" role="menuitem" onClick={() => void exportZip()}>
               <span>space · zip</span>
               <span className="topbar-menu-hint">blocks + sources, re-importable</span>
@@ -138,6 +154,11 @@ export function TopBar({ showSources, showContext, onToggleSources, onToggleCont
             <button type="button" role="menuitem" onClick={() => { setMenu(false); importRef.current?.click() }}>
               <span>import space…</span>
               <span className="topbar-menu-hint">from a .saoku.zip</span>
+            </button>
+            <div className="topbar-menu-rule" />
+            <button type="button" role="menuitem" onClick={() => { setMenu(false); ws.setRawView(!ws.rawView) }}>
+              <span>{ws.rawView ? 'back to blocks' : 'edit as markdown'}</span>
+              <span className="topbar-menu-hint">the whole space as one text</span>
             </button>
             <div className="topbar-menu-rule" />
             <button type="button" role="menuitem" className="topbar-menu-danger" onClick={() => { setMenu(false); setPending({ kind: 'reset' }) }} disabled={ws.blocks.length === 0 && sources.length === 0}>

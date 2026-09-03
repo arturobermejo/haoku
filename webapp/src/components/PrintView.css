@@ -237,3 +237,84 @@ h4.print-heading {
   color: #777;
   font-style: italic;
 }
+
+/* ---- markdown-rendered blocks ---- */
+.print-md--heading {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.print-heading-1 {
+  font-size: 12pt;
+}
+.print-heading-2 {
+  font-size: 10.5pt;
+}
+.print-heading-3 {
+  font-size: 9.5pt;
+  color: #444;
+}
+.print-md--paragraph {
+  font-family: var(--font-document);
+  font-size: 12pt;
+  line-height: 1.6;
+}
+.print-md p {
+  margin: 0 0 0.5em;
+}
+.print-md p:last-child {
+  margin-bottom: 0;
+}
+.print-md .cite {
+  font-family: var(--font-mono);
+  font-size: 7.5pt;
+  color: #2a5f8f;
+  margin: 0 1px;
+  vertical-align: super;
+}
+.print-md .cite::before {
+  content: '[';
+}
+.print-md .cite::after {
+  content: ']';
+}
+.print-md .block-title {
+  font-weight: 600;
+  margin-bottom: 2mm;
+}
+.print-md table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 10pt;
+}
+.print-md th,
+.print-md td {
+  border: 1px solid #bbb;
+  padding: 1.5mm 2.5mm;
+  text-align: left;
+  vertical-align: top;
+}
+.print-md thead th {
+  font-family: var(--font-mono);
+  font-size: 8pt;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: #eeece6;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.print-md tbody td:first-child {
+  font-weight: 600;
+  width: 22%;
+}
+.print-passage-key {
+  font-family: var(--font-mono);
+  color: #2a5f8f;
+}
+.print-doc space-callout,
+.print-doc space-diagram,
+.print-doc space-flashcards,
+.print-doc space-quiz {
+  font-size: 10.5pt;
+}

@@ -4,6 +4,7 @@ import { Document } from './components/Document'
 import { SourcesPanel } from './components/SourcesPanel'
 import { SourceViewer } from './components/SourceViewer'
 import { TopBar } from './components/TopBar'
+import { setImageResolver } from './elements/inline'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { ToolActivityBadge } from './tools/ToolActivityBadge'
 import { ToolsBridge } from './tools/ToolsBridge'
@@ -32,6 +33,11 @@ function Shell() {
   const compact = useMediaQuery('(max-width: 759px)')
   const [showSources, setShowSources] = useState(true)
   const [showContext, setShowContext] = useState(true)
+
+  // `space://<sourceId>` images in the markdown resolve to the stored files.
+  useEffect(() => {
+    setImageResolver(sources.imageUrl)
+  }, [sources])
 
   // Derived during render: a phone-sized window starts with the drawer closed (leaving that size restores
   // the panels), and opening a source from the drawer closes the drawer so the viewer gets the width.
