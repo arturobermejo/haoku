@@ -9,10 +9,12 @@ interface EditableTextProps {
   className?: string
   /** Open in edit mode on mount; used for freshly created, still-empty fields. */
   autoEdit?: boolean
+  /** Custom display of the saved value (e.g. citation marks); editing still uses the raw text. */
+  render?: (value: string) => React.ReactNode
 }
 
 /** Click-to-edit text. Blur saves; Enter saves single-line fields. */
-export function EditableText({ value, placeholder, onChange, multiline = false, className = '', autoEdit = false }: EditableTextProps) {
+export function EditableText({ value, placeholder, onChange, multiline = false, className = '', autoEdit = false, render }: EditableTextProps) {
   const [editing, setEditing] = useState(autoEdit)
   const [draft, setDraft] = useState(value)
   const ref = useRef<HTMLTextAreaElement>(null)
@@ -75,7 +77,7 @@ export function EditableText({ value, placeholder, onChange, multiline = false, 
       onPointerDown={(e) => e.stopPropagation()}
       title="click to edit"
     >
-      {value || placeholder}
+      {value ? (render ? render(value) : value) : placeholder}
     </span>
   )
 }
