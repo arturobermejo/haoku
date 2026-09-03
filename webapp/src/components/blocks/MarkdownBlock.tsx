@@ -13,6 +13,8 @@ export function MarkdownBlock({ block, autoEdit }: { block: ParsedBlock; autoEdi
   const kind = block.data.kind
   const className = kind === 'heading' ? `heading heading--${block.data.level}` : kind === 'comparison' ? 'comparison-block' : 'paragraph'
   const placeholder = kind === 'heading' ? 'section title' : kind === 'comparison' ? 'table' : 'write…'
+  // A paragraph the user just made from passages is nothing but their marks: type the sentence before them.
+  const caret = autoEdit && /^\s*(\[\^\w+\]\s*)+$/.test(block.raw) ? 'start' : 'end'
   return (
     <EditableText
       key={block.raw}
@@ -22,6 +24,7 @@ export function MarkdownBlock({ block, autoEdit }: { block: ParsedBlock; autoEdi
       className={className}
       multiline={kind !== 'heading'}
       autoEdit={autoEdit}
+      caret={caret}
       render={() => <div className="md-body" dangerouslySetInnerHTML={inner} />}
       onChange={(raw) => ws.replaceBlock(block.id, kind === 'heading' && !/^#{1,3}\s/.test(raw) ? `${'#'.repeat(block.data.kind === 'heading' ? block.data.level : 2)} ${raw}` : raw)}
     />

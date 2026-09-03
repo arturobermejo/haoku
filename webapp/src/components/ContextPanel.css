@@ -113,7 +113,7 @@
   color: var(--ink-25);
   font-size: 12px;
   cursor: pointer;
-  opacity: 0;
+  opacity: 0.55;
 }
 .context-source-row:hover .context-source-unlink {
   opacity: 1;
@@ -149,4 +149,52 @@
   letter-spacing: 0.06em;
   line-height: 1.6;
   color: var(--ink-25);
+}
+
+.context-source-row.is-draggable {
+  cursor: grab;
+}
+.context-source-row.is-draggable:active {
+  cursor: grabbing;
+}
+.context-drop {
+  margin: 0 -6px;
+  padding: 0 6px 8px;
+  border: 1px dashed transparent;
+  border-radius: var(--radius-card);
+  transition: border-color 120ms var(--ease), background 120ms var(--ease);
+}
+.context-drop.is-over {
+  border-color: var(--border-selected);
+  background: var(--summary);
+}
+.context-drop-note {
+  color: var(--ink-25);
+  white-space: nowrap;
+}
+
+/* one long gathered quote must not push the selected block's passages out of sight */
+.context-gathered .context-sources {
+  max-height: 42vh;
+  overflow-y: auto;
+}
+.context-gathered .context-source-quote {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.context-drop.is-fresh {
+  animation: context-fresh 1200ms var(--ease) both;
+}
+@keyframes context-fresh {
+  0%,
+  55% {
+    border-color: var(--border-selected);
+    background: var(--summary);
+  }
+  100% {
+    border-color: transparent;
+    background: transparent;
+  }
 }

@@ -1,6 +1,6 @@
 import { marks } from '../workspace/markdown/citations'
 import { blockToMarkdown } from '../workspace/markdown/serialize'
-import type { BlockData } from '../workspace/markdown/types'
+import type { BlockData, ParsedBlock } from '../workspace/markdown/types'
 import { useSources } from '../workspace/sources'
 import { useWorkspace } from '../workspace/store'
 import type { Citation } from '../workspace/types'
@@ -21,7 +21,7 @@ export function FromSourcesButton({ open, onToggle }: { open: boolean; onToggle:
  * The tray: what the passages gathered in the context can become — a block of any kind, or citations
  * linked to the selected block. The passages themselves are listed in the context panel; using them clears them.
  */
-export function FromSourcesTray({ onClose }: { onClose: () => void }) {
+export function FromSourcesTray({ onClose, onInserted }: { onClose: () => void; onInserted: (block: ParsedBlock) => void }) {
   const ws = useWorkspace()
   const { byId } = useSources()
   const passages = ws.collected
@@ -35,7 +35,7 @@ export function FromSourcesTray({ onClose }: { onClose: () => void }) {
 
   /** Builds the block once the passages have footnote keys; `keys[i]` belongs to `passages[i]`. */
   const make = (build: (keys: string[], keyOf: (c: Citation) => string) => BlockData | string) => {
-    ws.insertBlock(
+    const [block] = ws.insertBlock(
       (keys) => {
         const keyOf = (c: Citation) => keys[passages.indexOf(c)]
         const out = build(keys, keyOf)
@@ -46,6 +46,7 @@ export function FromSourcesTray({ onClose }: { onClose: () => void }) {
       'user',
     )
     ws.clearCollected()
+    if (block) onInserted(block)
     onClose()
   }
   const link = () => {
