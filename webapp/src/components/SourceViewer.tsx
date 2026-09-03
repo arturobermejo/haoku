@@ -47,14 +47,10 @@ export function SourceViewer({ target }: { target: ViewerTarget }) {
     )
   }
 
-  // Where a cited passage goes: the basket while collecting, else the selected block, else a new paragraph.
-  const selected = ws.selectedBlockId ? ws.blockById(ws.selectedBlockId) : undefined
-  const citeLabel = ws.collecting ? 'collect' : selected ? `cite in ${selected.kind}` : 'cite as paragraph'
-  const cite = (citation: Citation) => {
-    if (ws.collecting) ws.collect(citation)
-    else if (selected) ws.linkSources(selected.id, [citation])
-    else ws.insertBlock((keys) => `${citation.quote ?? ''} [^${keys[0]}]`, 'end', [citation], 'user')
-  }
+  // A selected passage goes to the context; from there it becomes a block (+ from sources) or gets linked to one.
+  const citeLabel = 'add to context'
+  const cite = (citation: Citation) => ws.collect(citation)
+  const gathered = ws.collected.length
 
   return (
     <aside className="panel panel--right viewer">
@@ -64,6 +60,11 @@ export function SourceViewer({ target }: { target: ViewerTarget }) {
           {source.title ?? source.name}
         </span>
         {source.kind === 'pdf' && <PdfViewerControls />}
+        {gathered > 0 && (
+          <span className="viewer-gathered" title="passages waiting in the context panel">
+            {gathered} in context
+          </span>
+        )}
         <button type="button" className="control" onClick={ws.closeViewer} title="close source">
           ×
         </button>

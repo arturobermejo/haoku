@@ -209,7 +209,7 @@
   margin-bottom: 4px;
 }
 
-/* citation marks
+/* citation marks */
 .cite {
   border: none;
   background: none;
@@ -227,13 +227,11 @@
   color: var(--ink-25);
 }
 
-.block-actions button.is-on {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--paper);
-}
-
-
 .block--draft {
   border-color: var(--border-selected);
+}
+
+.document-add-menu {
+  flex-wrap: wrap;
+  align-items: center;
 }
