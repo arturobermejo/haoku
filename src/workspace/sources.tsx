@@ -65,6 +65,13 @@ function kindOf(file: File): SourceKind | null {
 
 export function SourcesProvider({ children }: { children: ReactNode }) {
   const [sources, setSources] = useState<Source[]>([])
+  // The list as of the last write, ahead of React's render: a source added in this tick is readable
+  // right away, so a caller can add files and use them without waiting for a re-render.
+  const latest = useRef<Source[]>([])
+  const commit = useCallback((next: Source[] | ((prev: Source[]) => Source[])) => {
+    latest.current = typeof next === 'function' ? next(latest.current) : next
+    setSources(latest.current)
+  }, [])
   const [loaded, setLoaded] = useState(false)
   const blobs = useRef(new Map<string, Blob>())
   const pdfs = useRef(new Map<string, Promise<PdfDoc>>())
@@ -78,7 +85,7 @@ export function SourcesProvider({ children }: { children: ReactNode }) {
       .then((stored) => {
         if (cancelled) return
         for (const s of stored) blobs.current.set(s.meta.id, s.blob)
-        setSources(stored.map((s) => s.meta).sort((a, b) => a.addedAt - b.addedAt))
+        commit(stored.map((s) => s.meta).sort((a, b) => a.addedAt - b.addedAt))
       })
       .catch((err: unknown) => console.error('could not load sources', err))
       .finally(() => {
@@ -87,19 +94,19 @@ export function SourcesProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [commit])
 
   const pdf = useCallback((id: string): Promise<PdfDoc> => {
     let pending = pdfs.current.get(id)
     if (!pending) {
       const blob = blobs.current.get(id)
-      const meta = sources.find((s) => s.id === id)
+      const meta = latest.current.find((s) => s.id === id)
       if (!blob || !meta) return Promise.reject(new Error(`no source ${id}`))
       pending = openDocument(blob, meta.name)
       pdfs.current.set(id, pending)
     }
     return pending
-  }, [sources])
+  }, [])
 
   const text = useCallback((id: string): Promise<string> => {
     let pending = texts.current.get(id)
@@ -138,9 +145,9 @@ export function SourcesProvider({ children }: { children: ReactNode }) {
       await putStoredSource(meta, file)
       added.push(meta)
     }
-    if (added.length) setSources((prev) => [...prev, ...added])
+    if (added.length) commit((prev) => [...prev, ...added])
     return { added, rejected }
-  }, [])
+  }, [commit])
 
   const addText = useCallback<SourcesApi['addText']>(async ({ text, title, url }) => {
     const body = text.replace(/\r\n/g, '\n').trim()
@@ -152,9 +159,9 @@ export function SourcesProvider({ children }: { children: ReactNode }) {
     blobs.current.set(meta.id, blob)
     texts.current.set(meta.id, Promise.resolve(body))
     await putStoredSource(meta, blob)
-    setSources((prev) => [...prev, meta])
+    commit((prev) => [...prev, meta])
     return meta
-  }, [sources])
+  }, [commit, sources])
 
   const addImported = useCallback<SourcesApi['addImported']>(async (entries) => {
     const map = new Map<string, string>()
@@ -172,9 +179,9 @@ export function SourcesProvider({ children }: { children: ReactNode }) {
       added.push(next)
       map.set(meta.id, id)
     }
-    if (added.length) setSources((prev) => [...prev, ...added])
+    if (added.length) commit((prev) => [...prev, ...added])
     return map
-  }, [sources])
+  }, [commit, sources])
 
   const remove = useCallback(async (id: string) => {
     const doc = pdfs.current.get(id)
@@ -186,20 +193,23 @@ export function SourcesProvider({ children }: { children: ReactNode }) {
     const url = urls.current.get(id)
     if (url) URL.revokeObjectURL(url)
     urls.current.delete(id)
-    setSources((prev) => prev.filter((s) => s.id !== id))
+    commit((prev) => prev.filter((s) => s.id !== id))
     await deleteStoredSource(id)
-  }, [])
+  }, [commit])
 
   const clear = useCallback(async () => {
     await Promise.all(sources.map((s) => remove(s.id)))
   }, [sources, remove])
 
   const api = useMemo<SourcesApi>(() => {
-    const byId = (id: string) => sources.find((s) => s.id === id)
+    // Reads go through `latest` so they see what was just added; the memo is keyed on `sources` so
+    // components still re-render when the list changes.
+    const byId = (id: string) => latest.current.find((s) => s.id === id)
     const byRef = (ref: string) => {
-      const exact = byId(ref) ?? sources.find((s) => s.name.toLowerCase() === ref.toLowerCase())
+      const all = latest.current
+      const exact = byId(ref) ?? all.find((s) => s.name.toLowerCase() === ref.toLowerCase())
       if (exact) return exact
-      const prefix = sources.filter((s) => s.name.toLowerCase().startsWith(ref.toLowerCase()) || (s.title ?? '').toLowerCase().startsWith(ref.toLowerCase()))
+      const prefix = all.filter((s) => s.name.toLowerCase().startsWith(ref.toLowerCase()) || (s.title ?? '').toLowerCase().startsWith(ref.toLowerCase()))
       return prefix.length === 1 ? prefix[0] : undefined
     }
     const blob = (id: string) => blobs.current.get(id)
@@ -249,7 +259,7 @@ export function SourcesProvider({ children }: { children: ReactNode }) {
     }
     const search = async (query: string, ids?: string[], limit = 50): Promise<SearchHit[]> => {
       const hits: SearchHit[] = []
-      const targets = sources.filter((s) => s.kind !== 'image' && (!ids || ids.includes(s.id)))
+      const targets = latest.current.filter((s) => s.kind !== 'image' && (!ids || ids.includes(s.id)))
       for (const source of targets) {
         for (let page = 1; page <= pageCount(source.id); page++) {
           const idx = await index(source.id, page)

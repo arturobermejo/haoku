@@ -231,6 +231,8 @@ export interface WorkspaceApi extends State {
   blockById: (id: string) => ParsedBlock | undefined
   /** The citations a block draws on, in mark order. */
   citationsOf: (block: ParsedBlock) => Citation[]
+  /** Every mark of a block with the citation behind it; a mark with no footnote comes back undefined. */
+  marksOf: (block: ParsedBlock) => { key: string; citation?: Citation }[]
   /** The state as of the last dispatch, ahead of React's render, for tools that chain calls. */
   getState: () => State
 }
@@ -421,6 +423,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       },
       blockById: (id) => latest.current.blocks.find((b) => b.id === id),
       citationsOf: (block) => block.citationKeys.map((k) => latest.current.footnotes.get(k)).filter((c): c is Citation => c !== undefined),
+      marksOf: (block) => block.citationKeys.map((key) => ({ key, ...(latest.current.footnotes.get(key) ? { citation: latest.current.footnotes.get(key) } : {}) })),
       getState: () => latest.current,
     }
   }, [state, dispatch, sourceName])
