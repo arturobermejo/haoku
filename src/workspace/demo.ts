@@ -1,4 +1,4 @@
-/** Bundled demo sources (webapp/public/demo): three PDFs, reading notes and a diagram on memory in AI agents. */
+/** Bundled demo sources (public/demo): three PDFs, reading notes and a diagram on memory in AI agents. */
 export const DEMO_SOURCES: { file: string; type: string }[] = [
   { file: 'episodic-memory-for-agents.pdf', type: 'application/pdf' },
   { file: 'memory-systems-lecture-notes.pdf', type: 'application/pdf' },
