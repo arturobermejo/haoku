@@ -9,8 +9,9 @@
 }
 
 .shell {
+  position: relative;
   display: grid;
-  grid-template-columns: 356px minmax(0, 1fr) 440px;
+  grid-template-columns: clamp(280px, 23vw, 356px) minmax(0, 1fr) clamp(330px, 29vw, 440px);
   min-height: 0;
 }
 .app--no-sources .shell {
@@ -24,7 +25,7 @@
 }
 /* With a source open the document and the source share the width; the sources panel narrows so you can still switch source. */
 .app--viewer .shell {
-  grid-template-columns: 250px minmax(0, 1fr) min(680px, 44vw);
+  grid-template-columns: clamp(220px, 18vw, 250px) minmax(0, 1fr) min(680px, 44vw);
 }
 .app--viewer.app--no-sources .shell {
   grid-template-columns: minmax(0, 1fr) min(760px, 50vw);
@@ -55,4 +56,69 @@
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--ink-45);
+}
+
+/* ---- merged: sources over context in one rail (under 1180px) ---- */
+.app--merged .shell {
+  grid-template-columns: clamp(280px, 30vw, 340px) minmax(0, 1fr);
+}
+.app--merged.app--no-rail .shell {
+  grid-template-columns: minmax(0, 1fr);
+}
+.app--merged.app--viewer .shell {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.rail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--line);
+  background: var(--canvas);
+}
+.rail .panel {
+  flex: 1 1 50%;
+  min-height: 0;
+  border-left: 0;
+  border-right: 0;
+}
+.rail .panel + .panel {
+  border-top: 1px solid var(--line);
+}
+.rail .covered-list,
+.rail .sources-heading--covered {
+  display: none;
+}
+
+/* ---- compact: the rail is a drawer over the document; a source fills the screen (under 760px) ---- */
+.app--compact .shell {
+  grid-template-columns: minmax(0, 1fr);
+}
+.app--compact .rail {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: min(380px, 88vw);
+  z-index: var(--z-dock);
+  box-shadow: var(--shadow-card-drag);
+}
+.rail-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: calc(var(--z-dock) - 1);
+  background: rgba(20, 22, 26, 0.18);
+}
+.app--compact.app--viewer .document {
+  display: none;
+}
+.app--compact .viewer {
+  border-left: 0;
+}
+.app--compact .document-page {
+  padding: 28px 22px 100px;
+}
+.app--compact .block-actions {
+  right: 0;
+  top: -14px;
+  grid-auto-flow: column;
 }
