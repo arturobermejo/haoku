@@ -67,3 +67,61 @@
 .control.is-off {
   color: var(--ink-25);
 }
+
+.topbar-notice {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-45);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+}
+.topbar-menu {
+  position: relative;
+  flex: none;
+}
+.topbar-menu-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 230px;
+  padding: 6px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card-selected);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 5;
+}
+.topbar-menu-list button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.topbar-menu-list button:hover:not(:disabled) {
+  background: var(--sunken);
+}
+.topbar-menu-list button:disabled {
+  color: var(--ink-25);
+  cursor: default;
+}
+.topbar-menu-hint {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: var(--ink-45);
+}
