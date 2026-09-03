@@ -233,13 +233,19 @@ function markdownFor(parsed: Parsed, blockKeys: string[], nestedKeys: (string | 
   return blockToMarkdown({ ...d, cites: unique([...d.cites, ...blockKeys]) })
 }
 
-/** The passages the user gathered in the context, when a tool asks for them; clears them once used. */
-function takeCollected(ctx: ToolContext, input: Obj): Citation[] {
-  if (input.use_collected !== true) return []
+/**
+ * The passages the user gathered in the context, when a tool asks for them. Only the free ones: a
+ * passage some block already cites is material that is in the document, not material to build with.
+ * The basket is emptied either way.
+ */
+function takeCollected(ctx: ToolContext, input: Obj): { citations: Citation[]; skipped: number } {
+  if (input.use_collected !== true) return { citations: [], skipped: 0 }
   const collected = ctx.ws.getState().collected
+  const citations = collected.filter((c) => ctx.ws.blocksCiting(c).length === 0)
   if (collected.length) ctx.ws.clearCollected()
-  return collected
+  return { citations, skipped: collected.length - citations.length }
 }
+const skippedNote = (skipped: number) => (skipped ? ` ${skipped} gathered passage(s) were left out: the document already cites them.` : '')
 
 function parsePosition(raw: unknown): Position | ToolResult {
   if (raw === undefined || raw === 'end') return 'end'
@@ -384,10 +390,16 @@ export const TOOLS: ToolDef[] = [
         ok: true,
         summary: [
           block ? `${block.kind} ${block.id} is selected${text ? ' with text highlighted' : ''}.` : text ? 'Text is selected but no block.' : 'Nothing is selected.',
-          state.collected.length ? ` The user has gathered ${state.collected.length} passage(s) in the context — pass use_collected: true to add_block or link_sources to use them.` : '',
+          state.collected.length ? ` The user has gathered ${state.collected.length} passage(s) in the context, ${state.collected.filter((c) => ctx.ws.blocksCiting(c).length === 0).length} of them free — pass use_collected: true to add_block or link_sources to build with the free ones.` : '',
         ].join(''),
         block: block ? describeBlock(ctx, block, true) : null,
-        gathered: state.collected.length ? state.collected.map((c) => describeCitation(ctx, c)) : null,
+        gathered: state.collected.length
+          ? state.collected.map((c) => {
+              const cited = ctx.ws.blocksCiting(c)
+              // free: gathered and not in the document yet, so it is material for a new block.
+              return { ...describeCitation(ctx, c), free: cited.length === 0, ...(cited.length ? { cited_by: cited.map((b) => b.id) } : {}) }
+            })
+          : null,
         selected_text: inDocument && text ? text : null,
         source_selection: sourceSelection,
         open_source: state.viewer ? { source_id: state.viewer.sourceId, page: state.viewer.page } : null,
@@ -437,7 +449,7 @@ export const TOOLS: ToolDef[] = [
         markdown: { type: 'string', description: 'Raw markdown for exactly one block, instead of type + content.' },
         position: positionSchema,
         citations: { type: 'array', items: citationSchema, description: 'Sources this block draws on, in the order the [n] marks refer to.' },
-        use_collected: { type: 'boolean', description: 'Also cite the passages the user gathered in the context (get_selection → gathered), before the ones listed here. Clears them.' },
+        use_collected: { type: 'boolean', description: 'Also cite the passages the user gathered in the context and has not used yet (get_selection → gathered, the ones with free: true), before the ones listed here. Empties the basket.' },
       },
     },
     execute: async (input, ctx) => {
@@ -450,7 +462,8 @@ export const TOOLS: ToolDef[] = [
       if (isFail(position)) return position
       const idx = insertIndex(ctx.ws.getState().blocks, position)
       if (typeof idx !== 'number') return fail(idx.error, 'Ids come from get_workspace.')
-      const blockCites = [...takeCollected(ctx, input), ...listed]
+      const collected = takeCollected(ctx, input)
+      const blockCites = [...collected.citations, ...listed]
 
       let inserted: ParsedBlock[]
       if (rawMd) {
@@ -477,7 +490,7 @@ export const TOOLS: ToolDef[] = [
       const block = inserted[0]
       if (!block) return fail('The block came out empty.')
       const after = ctx.ws.blockById(block.id)!
-      return { ok: true, summary: `Added ${after.kind} ${after.id}${after.citationKeys.length ? ` citing ${after.citationKeys.length} passage(s)` : ''}.`, block: describeBlock(ctx, after, false) }
+      return { ok: true, summary: `Added ${after.kind} ${after.id}${after.citationKeys.length ? ` citing ${after.citationKeys.length} passage(s)` : ''}.${skippedNote(collected.skipped)}`, block: describeBlock(ctx, after, false) }
     },
   },
   {
@@ -633,7 +646,7 @@ export const TOOLS: ToolDef[] = [
       properties: {
         block_id: { type: 'string', description: 'Defaults to the selected block.' },
         passages: { type: 'array', items: citationSchema },
-        use_collected: { type: 'boolean', description: 'Link the passages the user gathered in the context (get_selection → gathered). Clears them.' },
+        use_collected: { type: 'boolean', description: 'Link the passages the user gathered in the context and has not used yet (get_selection → gathered, the ones with free: true). Empties the basket.' },
       },
     },
     execute: async (input, ctx) => {
@@ -641,11 +654,12 @@ export const TOOLS: ToolDef[] = [
       if (isFail(block)) return block
       const listed = await resolveCitations(ctx, input.passages)
       if (isFail(listed)) return listed
-      const citations = [...takeCollected(ctx, input), ...listed]
-      if (citations.length === 0) return fail('Nothing to link.', 'List passages ({ source, page?, quote? }) or pass use_collected: true.')
+      const collected = takeCollected(ctx, input)
+      const citations = [...collected.citations, ...listed]
+      if (citations.length === 0) return fail(`Nothing to link.${skippedNote(collected.skipped)}`, 'List passages ({ source, page?, quote? }) or pass use_collected: true.')
       const keys = ctx.ws.linkSources(block.id, citations)
       const after = ctx.ws.blockById(block.id)!
-      return { ok: true, summary: `Linked ${citations.length} passage(s) to ${block.kind} ${block.id} as ${keys.map((k) => `[^${k}]`).join(' ')}; it now cites ${after.citationKeys.length}.`, keys, block: describeBlock(ctx, after, false) }
+      return { ok: true, summary: `Linked ${citations.length} passage(s) to ${block.kind} ${block.id} as ${keys.map((k) => `[^${k}]`).join(' ')}; it now cites ${after.citationKeys.length}.${skippedNote(collected.skipped)}`, keys, block: describeBlock(ctx, after, false) }
     },
   },
 ]
