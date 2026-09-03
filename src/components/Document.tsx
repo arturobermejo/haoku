@@ -293,7 +293,7 @@ export function Document() {
 function BlockSources({ block, onClose }: { block: ParsedBlock; onClose: () => void }) {
   const ws = useWorkspace()
   const { sources, byId } = useSources()
-  const cited = ws.citationsOf(block)
+  const marks = ws.marksOf(block)
   const label = (id: string) => {
     const s = byId(id)
     return (s?.title ?? s?.name ?? 'removed source').replace(/\.[a-z0-9]+$/i, '')
@@ -308,14 +308,13 @@ function BlockSources({ block, onClose }: { block: ParsedBlock; onClose: () => v
         </button>
       </div>
 
-      {cited.length === 0 ? (
+      {marks.length === 0 ? (
         <div className="block-sources-empty">it cites none yet</div>
       ) : (
         <div className="block-sources-rows">
-          {cited.map((c, i) => {
-            const key = block.citationKeys[i]
-            return (
-              <div key={key} className="block-sources-row">
+          {marks.map(({ key, citation: c }, i) => (
+            <div key={`${key}:${i}`} className="block-sources-row">
+              {c ? (
                 <button type="button" className="block-sources-open" onClick={() => ws.openViewer({ sourceId: c.sourceId, page: c.page, citation: c })}>
                   <span className="block-sources-key">[^{key}]</span>
                   <span className="block-sources-name">
@@ -324,12 +323,17 @@ function BlockSources({ block, onClose }: { block: ParsedBlock; onClose: () => v
                   </span>
                   {c.quote && <span className="block-sources-quote">“{c.quote}”</span>}
                 </button>
-                <button type="button" className="block-sources-drop" title="drop this source from the block" onClick={() => ws.unlinkSource(block.id, key)}>
-                  ×
-                </button>
-              </div>
-            )
-          })}
+              ) : (
+                <div className="block-sources-open">
+                  <span className="block-sources-key">[^{key}]</span>
+                  <span className="block-sources-name">no source behind this mark</span>
+                </div>
+              )}
+              <button type="button" className="block-sources-drop" title="drop this source from the block" onClick={() => ws.unlinkSource(block.id, key)}>
+                ×
+              </button>
+            </div>
+          ))}
         </div>
       )}
 

@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
+import { useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 import { sections } from '../workspace/coverage'
-import { buildDemoProject, DEMO_SOURCES, DEMO_TITLE, fetchDemoFiles } from '../workspace/demo'
+import { buildDemoProject, DEMO_TITLE, fetchDemoFiles } from '../workspace/demo'
 import { useSources } from '../workspace/sources'
 import { urlLabel } from '../workspace/urls'
 import { useWorkspace } from '../workspace/store'
@@ -32,8 +32,6 @@ export function SourcesPanel({ onPaste }: { onPaste: () => void }) {
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<{ text: string; bad: boolean } | null>(null)
   const [confirmDemo, setConfirmDemo] = useState(false)
-  // The document is built after the sources are in: the API only reads a source once it is in state.
-  const awaitingSources = useRef(false)
 
   const addFiles = async (files: File[]) => {
     if (files.length === 0) return
@@ -47,7 +45,7 @@ export function SourcesPanel({ onPaste }: { onPaste: () => void }) {
     }
   }
 
-  /** The demo sources first; the document that cites them is built in the effect below. */
+  /** The demo sources, a document that cites them, and the practice questions that go with it. */
   const loadDemo = async () => {
     setBusy(true)
     setMessage(null)
@@ -56,32 +54,21 @@ export function SourcesPanel({ onPaste }: { onPaste: () => void }) {
       const { rejected } = await api.add(files)
       if (rejected.length) {
         setMessage({ text: rejected.map((r) => `${r.name}: ${r.reason}`).join(' · '), bad: true })
-        setBusy(false)
         return
       }
-      awaitingSources.current = true
+      const project = await buildDemoProject(api)
+      if (!project) {
+        setMessage({ text: 'the demo sources are here, but the document could not be built', bad: true })
+        return
+      }
+      ws.replaceDoc({ version: 2, title: DEMO_TITLE, markdown: project.markdown, highlights: [], blockIds: [], blockMeta: {}, practice: project.practice, practiceProgress: {} })
+      setMessage({ text: `demo project loaded · ${project.practice.length} practice questions`, bad: false })
     } catch (err: unknown) {
       setMessage({ text: err instanceof Error ? err.message : 'could not load the demo project', bad: true })
+    } finally {
       setBusy(false)
     }
   }
-
-  useEffect(() => {
-    if (!awaitingSources.current) return
-    if (!DEMO_SOURCES.every((d) => api.sources.some((s) => s.name === d.file))) return
-    awaitingSources.current = false
-    buildDemoProject(api)
-      .then((project) => {
-        if (!project) {
-          setMessage({ text: 'the demo sources are here, but the document could not be built', bad: true })
-          return
-        }
-        ws.replaceDoc({ version: 2, title: DEMO_TITLE, markdown: project.markdown, highlights: [], blockIds: [], blockMeta: {}, practice: project.practice, practiceProgress: {} })
-        setMessage({ text: `demo project loaded · ${project.practice.length} practice questions`, bad: false })
-      })
-      .catch((err: unknown) => setMessage({ text: err instanceof Error ? err.message : 'could not build the demo document', bad: true }))
-      .finally(() => setBusy(false))
-  }, [api, ws])
 
   // Loading it replaces the document, so a space with something in it gets a question first.
   const askDemo = () => {
