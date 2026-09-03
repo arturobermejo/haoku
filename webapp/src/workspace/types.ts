@@ -21,6 +21,8 @@ export interface Source {
   pages?: number
   /** PDF metadata title, when the file carries one. */
   title?: string
+  /** Where pasted text was copied from, when the user gave a URL. */
+  url?: string
 }
 
 /** Where a piece of the document came from. Resolved to rects or offsets on demand. */
