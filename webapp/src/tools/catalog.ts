@@ -292,7 +292,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'list_sources',
     title: 'List the sources',
-    description: 'Lists the sources in the workspace: id, name, kind (pdf, text, image), pages, size, and how many blocks cite each one.',
+    description: 'Lists the sources in the workspace: id, name, kind (pdf, text, image), the url pasted text came from, pages, size, and how many blocks cite each one.',
     inputSchema: { type: 'object', properties: {} },
     annotations: { readOnlyHint: true },
     execute: async (_input, ctx) => {
@@ -302,6 +302,7 @@ export const TOOLS: ToolDef[] = [
         name: s.name,
         ...(s.title ? { title: s.title } : {}),
         kind: s.kind,
+        ...(s.url ? { url: s.url } : {}),
         ...(s.kind === 'pdf' ? { pages: s.pages } : {}),
         bytes: s.bytes,
         cited_by: blocks.filter((b) => ctx.ws.citationsOf(b).some((c) => c.sourceId === s.id) || (b.data.kind === 'image' && b.data.sourceId === s.id)).length,

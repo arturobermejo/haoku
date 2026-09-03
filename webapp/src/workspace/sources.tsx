@@ -4,6 +4,7 @@ import type { PdfDoc } from '../pdf/types'
 import { anchorForMatch, buildPlainIndex, findInPage, indexPage, type Anchor, type PageIndex } from '../tools/textIndex'
 import { newId } from './ids'
 import { deleteStoredSource, listStoredSources, putStoredSource } from './storage'
+import { normalizeUrl, pastedName } from './urls'
 import type { Citation, Source, SourceKind } from './types'
 
 export interface SearchHit {
@@ -30,6 +31,8 @@ export interface SourcesApi {
   /** Finds a source by id, exact name, or a unique name prefix (case-insensitive). */
   byRef: (ref: string) => Source | undefined
   add: (files: File[]) => Promise<{ added: Source[]; rejected: { name: string; reason: string }[] }>
+  /** Adds text the user pasted (from a web page, a mail, anywhere) as a text source. */
+  addText: (input: { text: string; title?: string; url?: string }) => Promise<Source>
   /** Restores sources from an export, keeping their ids when free; returns old id → new id. */
   addImported: (entries: { meta: Source; blob: Blob }[]) => Promise<Map<string, string>>
   /** The stored file of a source. */
@@ -138,6 +141,20 @@ export function SourcesProvider({ children }: { children: ReactNode }) {
     if (added.length) setSources((prev) => [...prev, ...added])
     return { added, rejected }
   }, [])
+
+  const addText = useCallback<SourcesApi['addText']>(async ({ text, title, url }) => {
+    const body = text.replace(/\r\n/g, '\n').trim()
+    if (!body) throw new Error('there is nothing to add: the text is empty')
+    const origin = url?.trim() ? normalizeUrl(url) : undefined
+    if (url?.trim() && !origin) throw new Error(`"${url.trim()}" is not a web address`)
+    const blob = new Blob([body], { type: 'text/plain' })
+    const meta: Source = { id: newId('s'), kind: 'text', name: pastedName({ text: body, title, url: origin ?? undefined }, sources.map((s) => s.name)), mime: 'text/plain', bytes: blob.size, addedAt: Date.now(), ...(origin ? { url: origin } : {}) }
+    blobs.current.set(meta.id, blob)
+    texts.current.set(meta.id, Promise.resolve(body))
+    await putStoredSource(meta, blob)
+    setSources((prev) => [...prev, meta])
+    return meta
+  }, [sources])
 
   const addImported = useCallback<SourcesApi['addImported']>(async (entries) => {
     const map = new Map<string, string>()
@@ -259,8 +276,8 @@ export function SourcesProvider({ children }: { children: ReactNode }) {
       const anchor = anchorForMatch(idx, match)
       return { ...anchor, sourceId: citation.sourceId, start: match.start, end: match.end }
     }
-    return { sources, loaded, byId, byRef, add, addImported, blob, remove, clear, pdf, text, imageUrl, imageDataUrl, index, pageCount, search, resolve }
-  }, [sources, loaded, add, addImported, remove, clear, pdf, text])
+    return { sources, loaded, byId, byRef, add, addText, addImported, blob, remove, clear, pdf, text, imageUrl, imageDataUrl, index, pageCount, search, resolve }
+  }, [sources, loaded, add, addText, addImported, remove, clear, pdf, text])
 
   return <Context.Provider value={api}>{children}</Context.Provider>
 }

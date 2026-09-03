@@ -1,0 +1,117 @@
+.paste-dialog {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  max-width: none;
+  max-height: none;
+}
+.paste-dialog::backdrop {
+  background: rgba(20, 22, 26, 0.32);
+  backdrop-filter: blur(2px);
+}
+.paste-panel {
+  display: grid;
+  gap: 14px;
+  width: min(720px, 92vw);
+  max-height: 88vh;
+  padding: 22px 24px 20px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card-selected);
+  font-family: var(--font-ui);
+}
+.paste-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+.paste-title {
+  font-family: var(--font-document);
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.paste-sub {
+  margin-top: 4px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-45);
+  max-width: 52ch;
+}
+.paste-close {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  padding: 0 2px;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--ink-45);
+  cursor: pointer;
+}
+.paste-close:hover {
+  color: var(--ink);
+}
+.paste-text {
+  width: 100%;
+  min-height: min(40vh, 320px);
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--sunken);
+  font-family: var(--font-document);
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--ink);
+  resize: vertical;
+}
+.paste-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 620px) {
+  .paste-fields {
+    grid-template-columns: 1fr;
+  }
+}
+.paste-label {
+  display: grid;
+  gap: 5px;
+}
+.paste-field {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--sunken);
+  font-family: var(--font-ui);
+  font-size: 13.5px;
+  color: var(--ink);
+}
+.paste-text:focus,
+.paste-field:focus {
+  outline: none;
+  border-color: var(--border-selected);
+  background: var(--paper);
+}
+.paste-error {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  line-height: 1.5;
+  color: var(--kind-question);
+}
+.paste-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.paste-count {
+  margin-right: auto;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-25);
+}
