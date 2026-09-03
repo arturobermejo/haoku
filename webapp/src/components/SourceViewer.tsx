@@ -5,6 +5,7 @@ import { PdfReader } from '../reader/PdfReader'
 import type { Anchor } from '../tools/textIndex'
 import { anchorFromSelection } from '../workspace/pdfSelection'
 import { useSources, type ResolvedCitation } from '../workspace/sources'
+import { urlLabel } from '../workspace/urls'
 import { useWorkspace } from '../workspace/store'
 import type { Citation, HighlightKind, ViewerTarget } from '../workspace/types'
 import { ViewerToolbar, type ViewerSelection } from './ViewerToolbar'
@@ -59,6 +60,11 @@ export function SourceViewer({ target }: { target: ViewerTarget }) {
         <span className="viewer-name" title={source.name}>
           {source.title ?? source.name}
         </span>
+        {source.url && (
+          <a className="viewer-origin" href={source.url} target="_blank" rel="noreferrer noopener" title={source.url}>
+            {urlLabel(source.url)} ↗
+          </a>
+        )}
         {source.kind === 'pdf' && <PdfViewerControls />}
         {gathered > 0 && (
           <span className="viewer-gathered" title="passages waiting in the context panel">

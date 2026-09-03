@@ -115,3 +115,20 @@
   color: var(--ink-70);
   white-space: nowrap;
 }
+
+.viewer-origin {
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: var(--link);
+  text-decoration: none;
+}
+.viewer-origin:hover {
+  color: var(--link-hover);
+  text-decoration: underline;
+}

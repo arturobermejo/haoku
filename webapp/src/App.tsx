@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ContextPanel } from './components/ContextPanel'
+import { PasteSourceDialog } from './components/PasteSourceDialog'
 import { Document } from './components/Document'
 import { Practice } from './components/Practice'
 import { SourcesPanel } from './components/SourcesPanel'
@@ -35,6 +36,7 @@ function Shell() {
   const [showSources, setShowSources] = useState(true)
   const [showContext, setShowContext] = useState(true)
   const [mode, setMode] = useState<'study' | 'practice'>('study')
+  const [pasting, setPasting] = useState(false)
   const centre = mode === 'practice' ? <Practice /> : <Document />
 
   // `space://<sourceId>` images in the markdown resolve to the stored files.
@@ -92,7 +94,7 @@ function Shell() {
       <>
         {railOpen && (
           <aside className="rail">
-            {showSources && <SourcesPanel />}
+            {showSources && <SourcesPanel onPaste={() => setPasting(true)} />}
             {showContext && mode === 'study' && <ContextPanel />}
           </aside>
         )}
@@ -106,7 +108,7 @@ function Shell() {
     className = ['app', showSources ? '' : 'app--no-sources', right ? '' : 'app--no-right', ws.viewer ? 'app--viewer' : ''].filter(Boolean).join(' ')
     body = (
       <>
-        {showSources && <SourcesPanel />}
+        {showSources && <SourcesPanel onPaste={() => setPasting(true)} />}
         {centre}
         {right}
       </>
@@ -117,6 +119,15 @@ function Shell() {
     <div className={className}>
       <TopBar mode={mode} onMode={setMode} showSources={showSources} showContext={showContext} onToggleSources={() => setShowSources((v) => !v)} onToggleContext={() => setShowContext((v) => !v)} />
       <div className="shell">{body}</div>
+      {pasting && (
+        <PasteSourceDialog
+          onCancel={() => setPasting(false)}
+          onAdded={(source) => {
+            setPasting(false)
+            ws.openViewer({ sourceId: source.id })
+          }}
+        />
+      )}
       <ToolsBridge />
       <ToolActivityBadge />
     </div>

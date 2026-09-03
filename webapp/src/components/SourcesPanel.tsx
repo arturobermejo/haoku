@@ -2,6 +2,7 @@ import { useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 import { sections } from '../workspace/coverage'
 import { DEMO_TITLE, fetchDemoFiles } from '../workspace/demo'
 import { useSources } from '../workspace/sources'
+import { urlLabel } from '../workspace/urls'
 import { useWorkspace } from '../workspace/store'
 import type { Source } from '../workspace/types'
 import './SourcesPanel.css'
@@ -18,17 +19,17 @@ function relativeTime(ts: number): string {
 }
 
 function metaOf(source: Source): string {
-  const parts = [source.kind === 'pdf' ? `${source.pages ?? '?'} pp` : source.kind === 'image' ? 'image' : `${Math.max(1, Math.round(source.bytes / 1024))} kB`, `added ${relativeTime(source.addedAt)}`]
-  return parts.join(' · ')
+  const what = source.url ? urlLabel(source.url) : source.kind === 'pdf' ? `${source.pages ?? '?'} pp` : source.kind === 'image' ? 'image' : `${Math.max(1, Math.round(source.bytes / 1024))} kB`
+  return `${what} · added ${relativeTime(source.addedAt)}`
 }
 
-export function SourcesPanel() {
+export function SourcesPanel({ onPaste }: { onPaste: () => void }) {
   const api = useSources()
   const ws = useWorkspace()
   const inputRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
+  const [message, setMessage] = useState<{ text: string; bad: boolean } | null>(null)
 
   const addFiles = async (files: File[]) => {
     if (files.length === 0) return
@@ -36,7 +37,7 @@ export function SourcesPanel() {
     setMessage(null)
     try {
       const { rejected } = await api.add(files)
-      if (rejected.length) setMessage(rejected.map((r) => `${r.name}: ${r.reason}`).join(' · '))
+      if (rejected.length) setMessage({ text: rejected.map((r) => `${r.name}: ${r.reason}`).join(' · '), bad: true })
     } finally {
       setBusy(false)
     }
@@ -48,14 +49,14 @@ export function SourcesPanel() {
     try {
       const files = await fetchDemoFiles(api.sources.map((s) => s.name))
       if (files.length === 0) {
-        setMessage('the demo sources are already here')
+        setMessage({ text: 'the demo sources are already here', bad: false })
         return
       }
       const { rejected } = await api.add(files)
-      if (rejected.length) setMessage(rejected.map((r) => `${r.name}: ${r.reason}`).join(' · '))
+      if (rejected.length) setMessage({ text: rejected.map((r) => `${r.name}: ${r.reason}`).join(' · '), bad: true })
       if (ws.blocks.length === 0 && (ws.title === 'Untitled space' || !ws.title.trim())) ws.setTitle(DEMO_TITLE)
     } catch (err: unknown) {
-      setMessage(err instanceof Error ? err.message : 'could not load the demo sources')
+      setMessage({ text: err instanceof Error ? err.message : 'could not load the demo sources', bad: true })
     } finally {
       setBusy(false)
     }
@@ -109,9 +110,14 @@ export function SourcesPanel() {
         ))}
       </div>
 
-      <button type="button" className="sources-add" onClick={() => inputRef.current?.click()} disabled={busy}>
-        {busy ? 'adding…' : dragging ? 'release to add' : '+ add source'}
-      </button>
+      <div className="sources-actions">
+        <button type="button" className="sources-add" onClick={() => inputRef.current?.click()} disabled={busy}>
+          {busy ? 'adding…' : dragging ? 'release to add' : '+ add file'}
+        </button>
+        <button type="button" className="sources-add" onClick={onPaste} disabled={busy} title="add text you copied from a web page or anywhere else">
+          + paste text
+        </button>
+      </div>
       <input ref={inputRef} type="file" multiple accept="application/pdf,.pdf,text/*,.txt,.md,.markdown,image/*" onChange={onChange} hidden />
       <div className="sources-hint">
         pdf · text · image
@@ -124,7 +130,7 @@ export function SourcesPanel() {
           </>
         )}
       </div>
-      {message && <div className="sources-message">{message}</div>}
+      {message && <div className={`sources-message${message.bad ? '' : ' sources-message--ok'}`}>{message.text}</div>}
 
       {covered.length > 0 && (
         <>

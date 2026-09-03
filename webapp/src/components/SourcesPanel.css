@@ -170,3 +170,20 @@
 }
 .sources-demo:hover { color: var(--link-hover); }
 .sources-demo:disabled { opacity: 0.5; cursor: default; }
+
+.sources-actions {
+  display: flex;
+  gap: 6px;
+}
+.sources-actions .sources-add {
+  margin-top: 12px;
+  padding: 12px 10px;
+}
+.sources-add.is-on {
+  border-style: solid;
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.sources-message--ok {
+  color: var(--ink-45);
+}
