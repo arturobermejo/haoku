@@ -1,4 +1,4 @@
-"""Regenerates the bundled demo sources in webapp/public/demo. Run: python3 scripts/make_demo.py (needs reportlab + Pillow)."""
+"""Regenerates the bundled demo sources in public/demo. Run: python3 scripts/make_demo.py (needs reportlab + Pillow)."""
 import os
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
