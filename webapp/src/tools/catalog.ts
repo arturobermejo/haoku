@@ -65,13 +65,11 @@ const CONTENT_SHAPES: Record<BlockData['kind'], string> = {
   callout: '{ title?, body (markdown), tone?: "idea"|"example"|"warning"|"why" (default "idea") }',
   diagram: '{ title?, nodes: [{ label, citation? }], edges?: [{ from, to, label? }] } — any graph: from/to by 1-based node position or label, branches and cycles allowed, laid out automatically; without edges the nodes form a chain',
   comparison: '{ title?, columns: [string], rows: [{ label, cells: [string] }] }',
-  flashcards: '{ cards: [{ question, answer, citation? }] }',
-  quiz: '{ questions: [{ prompt, options: [string], answer: 1-based position or the option text, explanation? }] }',
   image: '{ source: an image source (id or name), caption? }',
 }
 
 const MARKDOWN_HELP =
-  'Block markdown: `## heading`, free markdown paragraphs, a GFM table (first column = row labels, optional **title** line above), `![caption](space://<source_id>)`, or an element: <space-callout tone="…" title="…">body</space-callout>, <space-diagram title="…">{"nodes":[{"label"}],"edges":[{"from":0,"to":1}]}</space-diagram>, <space-flashcards>{"cards":[{"question","answer"}]}</space-flashcards>, <space-quiz>{"questions":[{"prompt","options":[…],"answer":0}]}</space-quiz>. Cite with [^k] marks (keys from get_workspace) or list citations and use [1], [2]….'
+  'Block markdown: `## heading`, free markdown paragraphs, a GFM table (first column = row labels, optional **title** line above), `![caption](space://<source_id>)`, or an element: <space-callout tone="…" title="…">body</space-callout>, <space-diagram title="…">{"nodes":[{"label"}],"edges":[{"from":0,"to":1}]}</space-diagram>, Cite with [^k] marks (keys from get_workspace) or list citations and use [1], [2]….'
 
 function sourceOf(ctx: ToolContext, ref: string | undefined): Source | ToolResult {
   if (!ref) return fail('"source" is required.', 'Use an id or a file name from list_sources.')
@@ -199,45 +197,6 @@ async function parseContent(ctx: ToolContext, type: string, raw: unknown, base?:
       if (!columns || !rows || columns.length === 0) return shape('comparison')
       return { data: { kind: 'comparison', title: str(c, 'title') ?? (base?.kind === 'comparison' ? base.title : ''), columns, rows: rows.map((r) => ({ label: r.label, cells: columns.map((_, j) => r.cells[j] ?? '') })) }, nested: [] }
     }
-    case 'flashcards': {
-      const rawCards = arr(c.cards)
-      if (!rawCards && base?.kind === 'flashcards') return { data: base, nested: [] }
-      if (!rawCards || rawCards.length === 0) return shape('flashcards')
-      const cards: { question: string; answer: string }[] = []
-      const nested: (Citation | undefined)[] = []
-      for (const [i, k] of rawCards.entries()) {
-        const card = obj(k)
-        const question = card && str(card, 'question')
-        const answer = card && str(card, 'answer')
-        if (!question || !answer) return fail(`Card ${i + 1} needs a question and an answer.`, CONTENT_SHAPES.flashcards)
-        let citation: Citation | undefined
-        if (card.citation !== undefined) {
-          const r = await resolveCitation(ctx, card.citation, `card ${i + 1}`)
-          if (isFail(r)) return r
-          citation = r
-        }
-        cards.push({ question, answer })
-        nested.push(citation)
-      }
-      return { data: { kind: 'flashcards', cards, cites }, nested }
-    }
-    case 'quiz': {
-      const rawQs = arr(c.questions)
-      if (!rawQs && base?.kind === 'quiz') return { data: base, nested: [] }
-      if (!rawQs || rawQs.length === 0) return shape('quiz')
-      const questions = []
-      for (const [i, q] of rawQs.entries()) {
-        const question = obj(q)
-        const prompt = question && str(question, 'prompt')
-        const options = question && stringList(question.options)
-        if (!prompt || !options || options.length < 2) return fail(`Question ${i + 1} needs a prompt and at least two options.`, CONTENT_SHAPES.quiz)
-        const rawAnswer = question.answer
-        const answer = typeof rawAnswer === 'number' ? rawAnswer - 1 : typeof rawAnswer === 'string' ? options.findIndex((o) => o.toLowerCase() === rawAnswer.toLowerCase()) : -1
-        if (answer < 0 || answer >= options.length) return fail(`Question ${i + 1}: "answer" must be the 1-based position of the right option or its text.`, `Options: ${options.map((o, k) => `${k + 1} "${o}"`).join(', ')}.`)
-        questions.push({ prompt, options, answer, ...(str(question, 'explanation') ? { explanation: str(question, 'explanation') } : {}) })
-      }
-      return { data: { kind: 'quiz', questions, cites }, nested: [] }
-    }
     case 'image': {
       const ref = str(c, 'source') ?? str(c, 'source_id')
       if (!ref && base?.kind === 'image') return { data: { ...base, caption: str(c, 'caption') ?? base.caption }, nested: [] }
@@ -271,7 +230,6 @@ function markdownFor(parsed: Parsed, blockKeys: string[], nestedKeys: (string | 
   }
   if (d.kind === 'heading' || d.kind === 'image' || d.kind === 'comparison') return withCiteMarks(d.kind, blockToMarkdown(d), blockKeys)
   if (d.kind === 'diagram') return blockToMarkdown({ ...d, nodes: d.nodes.map((n, i) => ({ ...n, ...(nestedKeys[i] ? { cite: nestedKeys[i] } : {}) })), cites: unique([...d.cites, ...blockKeys]) })
-  if (d.kind === 'flashcards') return blockToMarkdown({ ...d, cards: d.cards.map((c, i) => ({ ...c, ...(nestedKeys[i] ? { cite: nestedKeys[i] } : {}) })), cites: unique([...d.cites, ...blockKeys]) })
   return blockToMarkdown({ ...d, cites: unique([...d.cites, ...blockKeys]) })
 }
 
@@ -438,7 +396,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'get_workspace',
     title: 'Read the knowledge space',
-    description: 'Returns the title, the sources, every block in order (id, type, excerpt or full content + markdown, citations with their footnote keys), the footnotes, the quiz answers so far, which sections are covered, and — with include_markdown — the whole document as markdown.',
+    description: 'Returns the title, the sources, every block in order (id, type, excerpt or full content + markdown, citations with their footnote keys), the footnotes, which sections are covered, and — with include_markdown — the whole document as markdown.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -450,14 +408,6 @@ export const TOOLS: ToolDef[] = [
     execute: async (input, ctx) => {
       const state = ctx.ws.getState()
       const full = input.include_content === true
-      const quiz = state.blocks.flatMap((b) =>
-        b.data.kind === 'quiz'
-          ? b.data.questions.map((q, i) => {
-              const picked = state.quizAnswers[`${b.id}:${i}`]
-              return { block_id: b.id, question: i + 1, prompt: q.prompt, answered: picked !== undefined, correct: picked === undefined ? null : picked === q.answer }
-            })
-          : [],
-      )
       return {
         ok: true,
         summary: `"${state.title}": ${state.blocks.length} block(s) from ${ctx.sources.sources.length} source(s).${state.collected.length ? ` The user has gathered ${state.collected.length} passage(s) in the context (see get_selection).` : ''}`,
@@ -465,8 +415,7 @@ export const TOOLS: ToolDef[] = [
         sources: ctx.sources.sources.map((s) => ({ id: s.id, name: s.name, kind: s.kind })),
         blocks: state.blocks.map((b) => describeBlock(ctx, b, full)),
         footnotes: [...state.footnotes].map(([key, c]) => describeCitation(ctx, c, key)),
-        sections: sections(state.blocks, state.quizAnswers).map((s) => ({ heading_id: s.headingId, title: s.title, blocks: s.blockCount, status: s.status })),
-        quiz,
+        sections: sections(state.blocks).map((s) => ({ heading_id: s.headingId, title: s.title, blocks: s.blockCount, status: s.status })),
         selected_block_id: state.selectedBlockId,
         history: { can_undo: state.past.length, can_redo: state.future.length },
         ...(input.include_markdown === true ? { markdown: state.markdown } : {}),
@@ -725,7 +674,7 @@ TOOLS.push(
   {
     name: 'add_practice',
     title: 'Add practice questions',
-    description: 'Adds multiple-choice questions to the practice bank (the "practice" tab), outside the document. Tie each one to the passage it checks with a citation. Quiz questions that live in the space are practised too, so use this for extra drilling material.',
+    description: 'Adds multiple-choice questions to the practice bank (the "practice" tab), outside the document. Tie each one to the passage it checks with a citation. The document itself holds no questions: this bank is the only place they live.',
     inputSchema: {
       type: 'object',
       properties: { items: { type: 'array', items: practiceItemSchema, minItems: 1 } },
@@ -759,16 +708,16 @@ TOOLS.push(
   {
     name: 'list_practice',
     title: 'Read the practice questions and progress',
-    description: 'Returns the practice questions (bank questions plus the ones drawn from the quizzes in the space) with how the user has done on each: seen, right, wrong.',
+    description: 'Returns the practice questions with how the user has done on each: seen, right, wrong.',
     inputSchema: { type: 'object', properties: {} },
     annotations: { readOnlyHint: true },
     execute: async (_input, ctx) => {
       const state = ctx.ws.getState()
-      const deck = buildDeck(state.blocks, state.footnotes, state.practice)
+      const deck = buildDeck(state.practice)
       const summary = progressSummary(deck, state.practiceProgress)
       const items = deck.map((it) => {
         const p = state.practiceProgress[it.id]
-        return { id: it.id, origin: it.origin, prompt: it.prompt, options: it.options, answer: it.answer + 1, ...(it.topic ? { topic: it.topic } : {}), ...(it.citation ? { citation: describeCitation(ctx, it.citation) } : {}), progress: p ? { seen: p.seen, right: p.right, wrong: p.wrong } : { seen: 0, right: 0, wrong: 0 } }
+        return { id: it.id, prompt: it.prompt, options: it.options, answer: it.answer + 1, ...(it.topic ? { topic: it.topic } : {}), ...(it.citation ? { citation: describeCitation(ctx, it.citation) } : {}), progress: p ? { seen: p.seen, right: p.right, wrong: p.wrong } : { seen: 0, right: 0, wrong: 0 } }
       })
       return { ok: true, summary: `${deck.length} practice question(s): ${summary.mastered} mastered, ${summary.struggling} to review, ${summary.unseen} unseen.`, ...summary, items }
     },
@@ -776,14 +725,14 @@ TOOLS.push(
   {
     name: 'remove_practice',
     title: 'Remove practice questions',
-    description: 'Removes questions from the practice bank by id (ids from list_practice; questions that come from the space are removed by editing the space).',
+    description: 'Removes questions from the practice bank by id (ids from list_practice).',
     inputSchema: { type: 'object', properties: { ids: { type: 'array', items: { type: 'string' }, minItems: 1 } }, required: ['ids'] },
     execute: async (input, ctx) => {
       const ids = stringList(input.ids)
       if (!ids || ids.length === 0) return fail('"ids" must list at least one id.')
       const bank = new Set(ctx.ws.getState().practice.map((it) => it.id))
       const missing = ids.filter((id) => !bank.has(id))
-      if (missing.length) return fail(`Not in the practice bank: ${missing.join(', ')}.`, 'Only bank questions (ids starting with p_) can be removed here.')
+      if (missing.length) return fail(`Not in the practice bank: ${missing.join(', ')}.`, 'Use the ids list_practice returns.')
       ctx.ws.removePractice(ids)
       return { ok: true, summary: `Removed ${ids.length} practice question(s).`, removed: ids }
     },
