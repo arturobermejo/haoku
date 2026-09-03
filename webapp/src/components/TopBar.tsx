@@ -10,13 +10,15 @@ import { PrintView } from './PrintView'
 import './TopBar.css'
 
 interface TopBarProps {
+  mode: 'study' | 'practice'
+  onMode: (mode: 'study' | 'practice') => void
   showSources: boolean
   showContext: boolean
   onToggleSources: () => void
   onToggleContext: () => void
 }
 
-export function TopBar({ showSources, showContext, onToggleSources, onToggleContext }: TopBarProps) {
+export function TopBar({ mode, onMode, showSources, showContext, onToggleSources, onToggleContext }: TopBarProps) {
   const ws = useWorkspace()
   const sourcesApi = useSources()
   const { sources } = sourcesApi
@@ -45,8 +47,8 @@ export function TopBar({ showSources, showContext, onToggleSources, onToggleCont
   }, [notice])
 
   const currentDoc = () => {
-    const { title, markdown, highlights, quizAnswers, blocks, blockMeta } = ws.getState()
-    return { version: 2 as const, title, markdown, highlights, quizAnswers, blockIds: blocks.map((b) => b.id), blockMeta }
+    const { title, markdown, highlights, quizAnswers, blocks, blockMeta, practice, practiceProgress } = ws.getState()
+    return { version: 2 as const, title, markdown, highlights, quizAnswers, blockIds: blocks.map((b) => b.id), blockMeta, practice, practiceProgress }
   }
 
   const exportMd = () => {
@@ -62,7 +64,7 @@ export function TopBar({ showSources, showContext, onToggleSources, onToggleCont
     try {
       const doc = currentDoc()
       const blob = await exportSpace(doc, sourcesApi)
-      downloadBlob(blob, `${fileSlug(doc.title)}.saoku.zip`)
+      downloadBlob(blob, `${fileSlug(doc.title)}.haoku.zip`)
       setNotice(`exported ${doc.blockIds.length} blocks and ${sources.length} sources`)
     } catch (err: unknown) {
       setNotice(err instanceof Error ? err.message : 'export failed')
@@ -114,7 +116,7 @@ export function TopBar({ showSources, showContext, onToggleSources, onToggleCont
     <header className="topbar">
       <div className="topbar-brand">
         <span className="topbar-mark" aria-hidden="true" />
-        <span className="topbar-name">saoku</span>
+        <span className="topbar-name">haoku</span>
       </div>
 
       <div className="topbar-document">
@@ -122,6 +124,15 @@ export function TopBar({ showSources, showContext, onToggleSources, onToggleCont
         <span className="topbar-meta">
           {sources.length} {sources.length === 1 ? 'source' : 'sources'} · {ws.blocks.length} {ws.blocks.length === 1 ? 'block' : 'blocks'}
         </span>
+      </div>
+
+      <div className="topbar-tabs" role="tablist">
+        <button type="button" role="tab" className={`topbar-tab${mode === 'study' ? ' is-on' : ''}`} aria-selected={mode === 'study'} onClick={() => onMode('study')}>
+          study
+        </button>
+        <button type="button" role="tab" className={`topbar-tab${mode === 'practice' ? ' is-on' : ''}`} aria-selected={mode === 'practice'} onClick={() => onMode('practice')}>
+          practice
+        </button>
       </div>
 
       <span
@@ -153,7 +164,7 @@ export function TopBar({ showSources, showContext, onToggleSources, onToggleCont
             </button>
             <button type="button" role="menuitem" onClick={() => { setMenu(false); importRef.current?.click() }}>
               <span>import space…</span>
-              <span className="topbar-menu-hint">from a .saoku.zip</span>
+              <span className="topbar-menu-hint">from a .haoku.zip</span>
             </button>
             <div className="topbar-menu-rule" />
             <button type="button" role="menuitem" onClick={() => { setMenu(false); ws.setRawView(!ws.rawView) }}>

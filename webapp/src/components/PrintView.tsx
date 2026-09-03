@@ -19,7 +19,7 @@ export function PrintView({ onDone }: { onDone: () => void }) {
 
   useEffect(() => {
     const previousTitle = document.title
-    document.title = ws.title || 'saoku space'
+    document.title = ws.title || 'haoku space'
     const finish = () => {
       document.title = previousTitle
       onDone()
@@ -60,7 +60,7 @@ export function PrintView({ onDone }: { onDone: () => void }) {
       <header className="print-head">
         <h1 className="print-title">{ws.title}</h1>
         <div className="print-meta">
-          saoku · {ws.blocks.length} {ws.blocks.length === 1 ? 'block' : 'blocks'} · exported {new Date().toLocaleDateString()}
+          haoku · {ws.blocks.length} {ws.blocks.length === 1 ? 'block' : 'blocks'} · exported {new Date().toLocaleDateString()}
         </div>
       </header>
       {ws.blocks.map((block) => {
