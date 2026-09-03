@@ -1,7 +1,16 @@
 .viewer {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+  /* One column no wider than the panel: a wide PDF page must not stretch the header past the edge. */
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   overflow: hidden;
+}
+.viewer-head {
+  min-width: 0;
+}
+.viewer-controls {
+  flex: none;
 }
 .viewer-head {
   display: flex;

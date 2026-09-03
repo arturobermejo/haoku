@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { renderInline } from '../../elements/inline'
 import type { ParsedBlock } from '../../workspace/markdown/types'
 import { useSources } from '../../workspace/sources'
@@ -12,11 +13,12 @@ export function ImageBlock({ block, data }: { block: ParsedBlock; data: ImageDat
   const { byId, imageUrl } = useSources()
   const source = byId(data.sourceId)
   const url = imageUrl(data.sourceId)
+  const caption = useMemo(() => ({ __html: renderInline(data.caption) }), [data.caption])
   return (
     <figure className="image-block">
       {url ? <img src={url} alt={data.caption} onClick={() => ws.openViewer({ sourceId: data.sourceId })} /> : <div className="image-block-missing">the image source was removed</div>}
       <figcaption>
-        <EditableText value={data.caption} placeholder="caption" className="image-caption" multiline render={(v) => <span dangerouslySetInnerHTML={{ __html: renderInline(v) }} />} onChange={(caption) => ws.updateBlockData(block.id, { ...data, caption })} />
+        <EditableText value={data.caption} placeholder="caption" className="image-caption" multiline render={() => <span dangerouslySetInnerHTML={caption} />} onChange={(caption) => ws.updateBlockData(block.id, { ...data, caption })} />
         {source && <span className="image-block-source">{source.name}</span>}
       </figcaption>
     </figure>
