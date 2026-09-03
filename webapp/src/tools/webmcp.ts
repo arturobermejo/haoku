@@ -27,7 +27,7 @@ declare global {
     modelContext?: ModelContext
   }
   interface Window {
-    saoku?: SaokuBridge
+    haoku?: HaokuBridge
   }
 }
 
@@ -39,7 +39,7 @@ export interface WebMcpStatus {
   error: string | null
 }
 
-export interface SaokuBridge {
+export interface HaokuBridge {
   tools: {
     list: () => Omit<ModelContextTool, 'execute'>[]
     call: (name: string, input?: unknown) => Promise<ToolResult>
@@ -86,7 +86,7 @@ export function getActivity(): ToolActivity {
 }
 
 /** Runs a tool and reports its start and end to the activity feed. Every entry point goes through here. */
-const DETAIL_KEYS = ['block_id', 'source', 'source_id', 'query', 'quote', 'type', 'markdown', 'block_ids', 'steps']
+const DETAIL_KEYS = ['block_id', 'source', 'source_id', 'query', 'quote', 'type', 'markdown', 'block_ids', 'items', 'ids', 'steps']
 
 function detailOf(input: unknown): string | undefined {
   if (!input || typeof input !== 'object') return undefined
@@ -177,7 +177,7 @@ export function unregister(): WebMcpStatus {
   return status
 }
 
-export const bridge: SaokuBridge = {
+export const bridge: HaokuBridge = {
   tools: {
     list: () => TOOLS.map(({ name, title, description, inputSchema, annotations }) => ({ name, title, description, inputSchema, annotations })),
     call: (name, input) => trackedRun(name, input),

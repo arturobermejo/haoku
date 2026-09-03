@@ -18,7 +18,7 @@ export function ToolsBridge() {
   useEffect(() => {
     // After a hot reload the cleanup below may have run last; point the tools at the live workspace again.
     if (ctx.current) setToolContext(ctx.current)
-    window.saoku = bridge
+    window.haoku = bridge
     void register()
     return () => {
       unregister()
