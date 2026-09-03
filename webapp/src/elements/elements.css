@@ -3,9 +3,7 @@
  * neutral values, so an exported markdown page looks right with just this file.
  */
 space-callout,
-space-diagram,
-space-flashcards,
-space-quiz {
+space-diagram {
   display: block;
   --se-ink: var(--ink, #1a1b1e);
   --se-ink-85: var(--ink-85, #2f3237);
@@ -30,9 +28,7 @@ space-quiz {
   color: var(--se-ink);
 }
 space-callout + *,
-space-diagram + *,
-space-flashcards + *,
-space-quiz + * {
+space-diagram + * {
   margin-top: 1em;
 }
 
@@ -220,9 +216,7 @@ space-quiz + * {
 .diagram-node-source,
 .diagram-node-tool,
 .diagram-edge-tool,
-.diagram-add-node,
-.flashcard-source,
-.flashcard-hide {
+.diagram-add-node {
   flex: none;
   border: none;
   background: none;
@@ -233,8 +227,7 @@ space-quiz + * {
   color: var(--se-ink-45);
   white-space: nowrap;
 }
-.diagram-node-source:hover,
-.flashcard-source:hover {
+.diagram-node-source:hover {
   color: var(--se-link);
 }
 .diagram-node-tool {
@@ -304,196 +297,4 @@ space-quiz + * {
 }
 .diagram-empty {
   padding: 10px 0;
-}
-
-/* ---- flashcards ---- */
-.space-root.flashcards {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-@media (max-width: 520px) {
-  .space-root.flashcards {
-    grid-template-columns: 1fr;
-  }
-}
-.flashcard {
-  display: grid;
-  gap: 12px;
-  padding: 16px 18px;
-  border: 1px solid var(--se-border);
-  border-radius: var(--se-radius);
-  background: var(--se-paper);
-  box-shadow: var(--se-shadow);
-  align-content: start;
-}
-.flashcard-question {
-  display: block;
-  font-size: 15px;
-  font-weight: 500;
-  line-height: 1.45;
-}
-.flashcard-reveal {
-  justify-self: start;
-}
-.flashcard-answer {
-  display: grid;
-  gap: 8px;
-  padding-top: 10px;
-  border-top: 1px dashed rgba(0, 0, 0, 0.12);
-}
-.flashcard-answer-text {
-  display: block;
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--se-ink-85);
-}
-.flashcard-foot {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-}
-.flashcard-hide:hover {
-  color: var(--se-ink);
-}
-
-/* ---- quiz ---- */
-.space-root.quiz {
-  display: grid;
-  gap: 14px;
-}
-.quiz-question {
-  padding: 18px 20px;
-  border: 1px solid var(--se-border);
-  border-radius: var(--se-radius);
-  background: var(--se-paper);
-}
-.quiz-question.is-correct {
-  border-color: oklch(0.5 0.1 155 / 0.4);
-}
-.quiz-question.is-wrong {
-  border-color: oklch(0.56 0.15 20 / 0.35);
-}
-.quiz-prompt {
-  display: flex;
-  gap: 12px;
-  align-items: baseline;
-  margin-bottom: 12px;
-}
-.quiz-number {
-  font-family: var(--se-font-mono);
-  font-size: 10px;
-  color: var(--se-ink-25);
-}
-.quiz-prompt-text {
-  font-size: 15.5px;
-  font-weight: 500;
-  line-height: 1.45;
-  flex: 1;
-  min-width: 0;
-}
-.quiz-options {
-  display: grid;
-  gap: 4px;
-}
-.quiz-option {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 6px 10px;
-  border: 1px solid transparent;
-  border-radius: var(--se-radius-control);
-  font-size: 14.5px;
-  color: var(--se-ink-85);
-}
-.quiz-option:hover {
-  background: var(--se-sunken);
-}
-.quiz-pick {
-  border: none;
-  background: none;
-  padding: 2px;
-  cursor: pointer;
-}
-.quiz-option-text {
-  flex: 1;
-  min-width: 0;
-}
-.quiz-mark {
-  border: none;
-  background: none;
-  padding: 0 4px;
-  cursor: pointer;
-  font-family: var(--se-font-mono);
-  font-size: 11px;
-  color: var(--se-ink-25);
-  opacity: 0;
-  transition: opacity 120ms ease;
-}
-.quiz-option:hover .quiz-mark,
-.quiz-mark.is-on {
-  opacity: 1;
-}
-.quiz-mark.is-on {
-  color: var(--se-good);
-}
-.quiz-add-option {
-  margin-top: 4px;
-  border: none;
-  background: none;
-  padding: 4px 10px;
-  cursor: pointer;
-  font-family: var(--se-font-mono);
-  font-size: 9px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--se-ink-25);
-}
-.quiz-add-option:hover {
-  color: var(--se-ink);
-}
-.quiz-option.is-answer {
-  background: oklch(0.5 0.1 155 / 0.1);
-  color: var(--se-ink);
-}
-.quiz-option.is-picked {
-  background: oklch(0.56 0.15 20 / 0.08);
-  color: var(--se-bad);
-}
-.quiz-radio {
-  font-family: var(--se-font-mono);
-  font-size: 11px;
-  color: var(--se-ink-45);
-}
-.quiz-feedback {
-  display: grid;
-  gap: 4px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px dashed rgba(0, 0, 0, 0.12);
-  font-size: 13.5px;
-  line-height: 1.55;
-  color: var(--se-ink-85);
-}
-.quiz-verdict {
-  font-family: var(--se-font-mono);
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--se-good);
-}
-.quiz-question.is-wrong .quiz-verdict {
-  color: var(--se-bad);
-}
-
-/* ---- print: everything revealed ---- */
-@media print {
-  .flashcard-reveal,
-  .flashcard-hide,
-  .quiz-pick,
-  .quiz-mark,
-  .quiz-add-option {
-    display: none !important;
-  }
 }

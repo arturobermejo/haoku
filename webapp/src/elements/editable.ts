@@ -12,8 +12,9 @@ interface EditableOptions {
 }
 
 /**
- * Click-to-edit text without a framework: a span that turns into a textarea on click.
- * Blur saves; Enter saves single-line fields (⌘/Ctrl+Enter for multiline); Escape reverts.
+ * Double-click-to-edit text without a framework: a span that turns into a textarea on double-click,
+ * so a single click can select the block. Blur saves; Enter saves single-line fields (⌘/Ctrl+Enter for
+ * multiline); Escape reverts.
  */
 export function editable(options: EditableOptions): HTMLElement {
   const { value, placeholder, className = '', multiline = false, markdown = true } = options
@@ -22,10 +23,11 @@ export function editable(options: EditableOptions): HTMLElement {
     if (markdown) span.innerHTML = renderInline(value)
     else span.textContent = value
   } else span.textContent = placeholder
-  span.title = 'click to edit'
-  span.addEventListener('click', (e) => {
+  span.title = 'double-click to edit'
+  span.addEventListener('dblclick', (e) => {
     if ((e.target as HTMLElement).closest('.cite')) return
     e.stopPropagation()
+    window.getSelection()?.removeAllRanges()
     open()
   })
 

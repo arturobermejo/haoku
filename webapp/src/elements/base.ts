@@ -7,7 +7,7 @@
  */
 export abstract class SpaceElement<D> extends HTMLElement {
   static get observedAttributes() {
-    return ['editable', 'answers', 'revealed', 'print', 'title', 'tone', 'cites']
+    return ['editable', 'print', 'title', 'tone', 'cites']
   }
 
   #data: D | null = null
