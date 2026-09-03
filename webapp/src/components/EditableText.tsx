@@ -7,8 +7,10 @@ interface EditableTextProps {
   onChange: (value: string) => void
   multiline?: boolean
   className?: string
-  /** Open in edit mode on mount; used for freshly created, still-empty fields. */
+  /** Open in edit mode on mount; used for freshly created fields. */
   autoEdit?: boolean
+  /** Where the caret lands when the editor opens. Defaults to the end. */
+  caret?: 'start' | 'end'
   /** Custom display of the saved value (e.g. rendered markdown); editing still uses the raw text. */
   render?: (value: string) => React.ReactNode
   /** Display element; use `div` when the rendered value holds block-level HTML. */
@@ -18,7 +20,7 @@ interface EditableTextProps {
 }
 
 /** Double-click-to-edit text: a single click only selects the block. Blur saves; Enter saves single-line fields. */
-export function EditableText({ value, placeholder, onChange, multiline = false, className = '', autoEdit = false, render, as: Tag = 'span', onDone }: EditableTextProps) {
+export function EditableText({ value, placeholder, onChange, multiline = false, className = '', autoEdit = false, caret = 'end', render, as: Tag = 'span', onDone }: EditableTextProps) {
   const [editing, setEditing] = useState(autoEdit)
   const [draft, setDraft] = useState(value)
   const ref = useRef<HTMLTextAreaElement>(null)
@@ -28,10 +30,11 @@ export function EditableText({ value, placeholder, onChange, multiline = false, 
     const el = ref.current
     if (!el) return
     el.focus()
-    el.setSelectionRange(el.value.length, el.value.length)
+    const at = caret === 'start' ? 0 : el.value.length
+    el.setSelectionRange(at, at)
     el.style.height = 'auto'
     el.style.height = `${el.scrollHeight}px`
-  }, [editing])
+  }, [editing, caret])
 
   const commit = () => {
     setEditing(false)

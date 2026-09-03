@@ -48,9 +48,14 @@ export function SourceViewer({ target }: { target: ViewerTarget }) {
     )
   }
 
-  // A selected passage goes to the context; from there it becomes a block (+ from sources) or gets linked to one.
-  const citeLabel = 'add to context'
-  const cite = (citation: Citation) => ws.collect(citation)
+  // A picked passage goes to the block that asked for one (its ⚲ menu), else to the context, where it
+  // waits to become a block or to be linked to one.
+  const linkTo = ws.linkTarget ? ws.blockById(ws.linkTarget) : undefined
+  const citeLabel = linkTo ? `add to the ${linkTo.kind}` : 'add to context'
+  const cite = (citation: Citation) => {
+    if (linkTo) ws.linkSources(linkTo.id, [citation])
+    else ws.collect(citation)
+  }
   const gathered = ws.collected.length
 
   return (
@@ -66,10 +71,19 @@ export function SourceViewer({ target }: { target: ViewerTarget }) {
           </a>
         )}
         {source.kind === 'pdf' && <PdfViewerControls />}
-        {gathered > 0 && (
-          <span className="viewer-gathered" title="passages waiting in the context panel">
-            {gathered} in context
+        {linkTo ? (
+          <span className="viewer-gathered is-target">
+            citing into the {linkTo.kind}
+            <button type="button" className="viewer-gathered-stop" title="stop citing into it" onClick={() => ws.setLinkTarget(null)}>
+              ×
+            </button>
           </span>
+        ) : (
+          gathered > 0 && (
+            <span className="viewer-gathered" title="passages waiting in the context panel">
+              {gathered} in context
+            </span>
+          )
         )}
         <button type="button" className="control" onClick={ws.closeViewer} title="close source">
           ×

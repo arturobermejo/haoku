@@ -28,6 +28,8 @@ interface State extends Snapshot {
   selectedBlockId: string | null
   /** Passages gathered from the sources, shown in the context panel until they become a block. */
   collected: Citation[]
+  /** The block a passage picked in a source is linked to, instead of being gathered. */
+  linkTarget: string | null
   focusKey: number
   viewer: ViewerTarget | null
   past: Snapshot[]
@@ -56,6 +58,7 @@ type Action =
   | { type: 'gradePractice'; id: string; correct: boolean }
   | { type: 'resetPractice' }
   | { type: 'select'; id: string | null }
+  | { type: 'setLinkTarget'; id: string | null }
   | { type: 'collect'; citation: Citation }
   | { type: 'uncollect'; index: number }
   | { type: 'clearCollected' }
@@ -78,6 +81,7 @@ const initial: State = {
   rawView: false,
   selectedBlockId: null,
   collected: [],
+  linkTarget: null,
   focusKey: 0,
   viewer: null,
   past: [],
@@ -85,7 +89,7 @@ const initial: State = {
 }
 
 const HISTORY_LIMIT = 100
-const VIEW_ACTIONS = new Set<Action['type']>(['load', 'reset', 'setRawView', 'addPractice', 'removePractice', 'gradePractice', 'resetPractice', 'select', 'collect', 'uncollect', 'clearCollected', 'focus', 'openViewer', 'closeViewer', 'undo', 'redo'])
+const VIEW_ACTIONS = new Set<Action['type']>(['load', 'reset', 'setRawView', 'addPractice', 'removePractice', 'gradePractice', 'resetPractice', 'select', 'setLinkTarget', 'collect', 'uncollect', 'clearCollected', 'focus', 'openViewer', 'closeViewer', 'undo', 'redo'])
 
 const snapshot = (s: State): Snapshot => ({ title: s.title, markdown: s.markdown, highlights: s.highlights, blocks: s.blocks, footnotes: s.footnotes })
 
@@ -96,7 +100,7 @@ function fromDoc(doc: WorkspaceDoc): Pick<State, 'title' | 'markdown' | 'highlig
 
 function restore(state: State, snap: Snapshot): State {
   const ids = new Set(snap.blocks.map((b) => b.id))
-  return { ...state, ...snap, selectedBlockId: state.selectedBlockId && ids.has(state.selectedBlockId) ? state.selectedBlockId : null }
+  return { ...state, ...snap, selectedBlockId: state.selectedBlockId && ids.has(state.selectedBlockId) ? state.selectedBlockId : null, linkTarget: state.linkTarget && ids.has(state.linkTarget) ? state.linkTarget : null }
 }
 
 function reducer(state: State, action: Action): State {
@@ -111,7 +115,7 @@ function apply(state: State, action: Action): State {
     case 'load':
       return { ...initial, loaded: true, ...(action.doc ? fromDoc(action.doc) : {}) }
     case 'replace':
-      return { ...state, ...fromDoc(action.doc), selectedBlockId: null, collected: [], viewer: null, rawView: false }
+      return { ...state, ...fromDoc(action.doc), selectedBlockId: null, collected: [], linkTarget: null, viewer: null, rawView: false }
     case 'reset':
       return { ...initial, loaded: true }
     case 'setTitle':
@@ -124,6 +128,7 @@ function apply(state: State, action: Action): State {
         footnotes: action.footnotes,
         blockMeta: action.meta ? { ...state.blockMeta, ...action.meta } : state.blockMeta,
         selectedBlockId: action.select !== undefined ? action.select : state.selectedBlockId && action.blocks.some((b) => b.id === state.selectedBlockId) ? state.selectedBlockId : null,
+        linkTarget: state.linkTarget && action.blocks.some((b) => b.id === state.linkTarget) ? state.linkTarget : null,
       }
     }
     case 'addHighlight':
@@ -146,6 +151,8 @@ function apply(state: State, action: Action): State {
       return { ...state, practiceProgress: {} }
     case 'select':
       return { ...state, selectedBlockId: action.id }
+    case 'setLinkTarget':
+      return { ...state, linkTarget: action.id }
     case 'collect':
       return { ...state, collected: [...state.collected, action.citation] }
     case 'uncollect':
@@ -207,6 +214,11 @@ export interface WorkspaceApi extends State {
   gradePractice: (id: string, correct: boolean) => void
   resetPractice: () => void
   select: (id: string | null) => void
+  /**
+   * While a block is the link target, a passage picked in a source goes straight to it instead of
+   * being gathered in the context. Set from the block's own sources menu.
+   */
+  setLinkTarget: (id: string | null) => void
   /** Adds a passage to the context (the ones gathered so far); duplicates are ignored. */
   collect: (citation: Citation) => void
   uncollect: (index: number) => void
@@ -387,6 +399,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       gradePractice: (id, correct) => dispatch({ type: 'gradePractice', id, correct }),
       resetPractice: () => dispatch({ type: 'resetPractice' }),
       select: (id) => dispatch({ type: 'select', id }),
+      setLinkTarget: (id) => dispatch({ type: 'setLinkTarget', id }),
       collect: (citation) => {
         if (latest.current.collected.some((c) => sameCitation(c, citation))) return
         dispatch({ type: 'collect', citation })
