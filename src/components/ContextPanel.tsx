@@ -17,7 +17,7 @@ export function ContextPanel() {
   const [pending, setPending] = useState<{ index: number; citation: Citation } | null>(null)
   const blockRef = useRef<HTMLDivElement>(null)
   const block = ws.selectedBlockId ? ws.blocks.find((b) => b.id === ws.selectedBlockId) : undefined
-  const cites = block ? ws.citationsOf(block) : []
+  const marks = block ? ws.marksOf(block) : []
   const gathered = ws.collected
   // Selecting a block puts its passages on screen: the gathered list above can be long. The section is
   // keyed by the block, so it remounts and its highlight animation replays on every new selection.
@@ -30,6 +30,19 @@ export function ContextPanel() {
     const source = sourcesApi.byId(c.sourceId)
     return source?.title ?? source?.name ?? 'removed source'
   }
+
+  /** A mark whose footnote is gone: the block still points at it, so it is shown rather than dropped. */
+  const dangling = (key: string, onRemove: () => void) => (
+    <div className="context-source-row">
+      <div className="context-source context-source--dangling">
+        <span className="context-source-name">[^{key}]</span>
+        <span className="context-source-where">no source behind this mark</span>
+      </div>
+      <button type="button" className="context-source-unlink" title="remove this mark" onClick={onRemove}>
+        ×
+      </button>
+    </div>
+  )
 
   const passage = (c: Citation, key: string | null, onRemove: () => void, removeTitle: string, drag?: (event: DragEvent) => void) => {
     const source = sourcesApi.byId(c.sourceId)
@@ -117,15 +130,15 @@ export function ContextPanel() {
         dropZone(
           <>
             <div className="panel-label context-section">
-              {cites.some((c) => c.quote) ? `passages this ${block.kind} draws on` : `sources of this ${block.kind}`}
+              {marks.some((m) => m.citation?.quote) ? `passages this ${block.kind} draws on` : `sources of this ${block.kind}`}
               {gathered.length > 0 && <span className="context-drop-note"> · drop one here</span>}
             </div>
-            {cites.length === 0 ? (
+            {marks.length === 0 ? (
               <div className="context-empty">this {block.kind} cites no source yet</div>
             ) : (
               <div className="context-sources">
-                {cites.map((c, i) => (
-                  <div key={i}>{passage(c, block.citationKeys[i], () => ws.unlinkSource(block.id, block.citationKeys[i]), 'unlink this passage')}</div>
+                {marks.map((m, i) => (
+                  <div key={`${m.key}:${i}`}>{m.citation ? passage(m.citation, m.key, () => ws.unlinkSource(block.id, m.key), 'unlink this passage') : dangling(m.key, () => ws.unlinkSource(block.id, m.key))}</div>
                 ))}
               </div>
             )}

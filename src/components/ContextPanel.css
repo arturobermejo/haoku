@@ -198,3 +198,11 @@
     background: transparent;
   }
 }
+
+.context-source--dangling {
+  cursor: default;
+  color: var(--ink-45);
+}
+.context-source--dangling .context-source-name {
+  color: var(--ink-45);
+}
