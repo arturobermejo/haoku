@@ -1,30 +1,19 @@
-import type { Block } from '../../workspace/types'
-import { CalloutBlock } from './CalloutBlock'
-import { ComparisonBlock } from './ComparisonBlock'
-import { DiagramBlock } from './DiagramBlock'
-import { FlashcardsBlock } from './FlashcardsBlock'
-import { HeadingBlock } from './HeadingBlock'
+import type { ParsedBlock } from '../../workspace/markdown/types'
+import { ElementBlock } from './ElementBlock'
 import { ImageBlock } from './ImageBlock'
-import { ParagraphBlock } from './ParagraphBlock'
-import { QuizBlock } from './QuizBlock'
+import { MarkdownBlock } from './MarkdownBlock'
 
-export function BlockBody({ block }: { block: Block }) {
-  switch (block.content.type) {
-    case 'heading':
-      return <HeadingBlock block={block} content={block.content} />
-    case 'paragraph':
-      return <ParagraphBlock block={block} content={block.content} />
-    case 'callout':
-      return <CalloutBlock block={block} content={block.content} />
-    case 'diagram':
-      return <DiagramBlock block={block} content={block.content} />
-    case 'comparison':
-      return <ComparisonBlock block={block} content={block.content} />
-    case 'flashcards':
-      return <FlashcardsBlock block={block} content={block.content} />
-    case 'quiz':
-      return <QuizBlock block={block} content={block.content} />
+export function BlockBody({ block, autoEdit = false }: { block: ParsedBlock; autoEdit?: boolean }) {
+  const d = block.data
+  switch (d.kind) {
     case 'image':
-      return <ImageBlock block={block} content={block.content} />
+      return <ImageBlock block={block} data={d} />
+    case 'callout':
+    case 'diagram':
+    case 'flashcards':
+    case 'quiz':
+      return <ElementBlock block={block} data={d} />
+    default:
+      return <MarkdownBlock block={block} autoEdit={autoEdit} />
   }
 }

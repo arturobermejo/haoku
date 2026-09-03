@@ -1,25 +1,22 @@
+import { renderInline } from '../../elements/inline'
+import type { ParsedBlock } from '../../workspace/markdown/types'
 import { useSources } from '../../workspace/sources'
 import { useWorkspace } from '../../workspace/store'
-import type { Block, BlockContent } from '../../workspace/types'
 import { EditableText } from '../EditableText'
 
-type Content = Extract<BlockContent, { type: 'image' }>
+type ImageData = Extract<ParsedBlock['data'], { kind: 'image' }>
 
-/** An image source placed in the document, with a caption. */
-export function ImageBlock({ block, content }: { block: Block; content: Content }) {
+/** `![caption](space://sourceId)`: an image source in the document, caption editable. */
+export function ImageBlock({ block, data }: { block: ParsedBlock; data: ImageData }) {
   const ws = useWorkspace()
   const { byId, imageUrl } = useSources()
-  const source = byId(content.sourceId)
-  const url = imageUrl(content.sourceId)
+  const source = byId(data.sourceId)
+  const url = imageUrl(data.sourceId)
   return (
     <figure className="image-block">
-      {url ? (
-        <img src={url} alt={content.caption || source?.name || ''} onClick={() => ws.openViewer({ sourceId: content.sourceId })} />
-      ) : (
-        <div className="image-block-missing">the image source was removed</div>
-      )}
+      {url ? <img src={url} alt={data.caption} onClick={() => ws.openViewer({ sourceId: data.sourceId })} /> : <div className="image-block-missing">the image source was removed</div>}
       <figcaption>
-        <EditableText value={content.caption} placeholder="caption" className="image-caption" onChange={(caption) => ws.updateBlock(block.id, (b) => ({ ...b, content: { ...content, caption } }))} />
+        <EditableText value={data.caption} placeholder="caption" className="image-caption" multiline render={(v) => <span dangerouslySetInnerHTML={{ __html: renderInline(v) }} />} onChange={(caption) => ws.updateBlockData(block.id, { ...data, caption })} />
         {source && <span className="image-block-source">{source.name}</span>}
       </figcaption>
     </figure>

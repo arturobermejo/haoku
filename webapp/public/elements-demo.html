@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>space elements — standalone demo</title>
+    <link rel="stylesheet" href="/elements/space-elements.css" />
+    <style>
+      body { max-width: 760px; margin: 40px auto; padding: 0 20px; font-family: 'Space Grotesk', Helvetica, Arial, sans-serif; color: #1a1b1e; }
+      h2 { font-family: ui-monospace, Menlo, monospace; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: #4a4e55; }
+      p { font-family: Georgia, serif; font-size: 17px; line-height: 1.7; }
+      textarea { width: 100%; height: 160px; font: 12px ui-monospace, Menlo, monospace; }
+      #log { font: 11px ui-monospace, Menlo, monospace; color: #666; white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <p>An exported saoku markdown file rendered with <code>marked</code> plus <code>space-elements.js</code>. Events the elements emit show up below.</p>
+    <textarea id="src">## Why a context window is not memory
+
+Every call to a language model starts from nothing [^1], so an agent needs something **outside** the window [^2].
+
+<space-callout tone="warning" title="Memory poisoning" cites="2">
+Anything that comes back from a tool is *untrusted*.
+</space-callout>
+
+<space-diagram title="Write / read">
+{"nodes":[{"label":"Event"},{"label":"Summarise + score","cite":"1"},{"label":"Store"}],
+ "edges":[{"from":0,"to":1,"label":"write"},{"from":1,"to":2}]}
+</space-diagram>
+
+<space-flashcards>
+{"cards":[{"question":"Consolidation","answer":"Distils episodes into facts. [^2]","cite":"1"},{"question":"The when test","answer":"If it has a when, it is episodic."}]}
+</space-flashcards>
+
+<space-quiz cites="1">
+{"questions":[{"prompt":"Which store has a *when* attached?","options":["Semantic","Episodic","Procedural"],"answer":1,"explanation":"Episodes are time-stamped."}]}
+</space-quiz>
+
+[^1]: [lecture.pdf, p. 1](space://s_lec/1) — "Every call to a language model starts from nothing"
+[^2]: [paper.pdf, p. 1](space://s_pap/1) — "the context window is the only state they carry"
+</textarea>
+    <p><button id="render">render</button> <label><input type="checkbox" id="editable" /> editable</label></p>
+    <div id="out"></div>
+    <h2>events</h2>
+    <div id="log"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/15.0.7/marked.min.js"></script>
+    <script src="/elements/space-elements.js"></script>
+    <script>
+      const out = document.getElementById('out')
+      const log = document.getElementById('log')
+      function render() {
+        out.innerHTML = marked.parse(document.getElementById('src').value)
+        if (document.getElementById('editable').checked) out.querySelectorAll('space-callout, space-diagram, space-flashcards, space-quiz').forEach((e) => e.setAttribute('editable', ''))
+      }
+      for (const name of ['space-change', 'space-answer', 'space-reveal', 'space-cite']) {
+        out.addEventListener(name, (e) => {
+          log.textContent = `${name} ${JSON.stringify(e.detail)}\n` + log.textContent
+        })
+      }
+      document.getElementById('render').addEventListener('click', render)
+      render()
+    </script>
+  </body>
+</html>

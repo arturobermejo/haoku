@@ -86,7 +86,7 @@ export function getActivity(): ToolActivity {
 }
 
 /** Runs a tool and reports its start and end to the activity feed. Every entry point goes through here. */
-const DETAIL_KEYS = ['block_id', 'source', 'source_id', 'query', 'quote', 'type', 'block_ids', 'steps']
+const DETAIL_KEYS = ['block_id', 'source', 'source_id', 'query', 'quote', 'type', 'markdown', 'block_ids', 'steps']
 
 function detailOf(input: unknown): string | undefined {
   if (!input || typeof input !== 'object') return undefined

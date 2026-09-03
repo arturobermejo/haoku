@@ -34,61 +34,6 @@ export interface Citation {
   occurrence?: number
 }
 
-export type CalloutTone = 'idea' | 'example' | 'warning' | 'why'
-
-export interface DiagramNode {
-  id: string
-  label: string
-  citation?: Citation
-}
-export interface DiagramEdge {
-  from: string
-  to: string
-  label?: string
-}
-export interface Flashcard {
-  id: string
-  question: string
-  answer: string
-  citation?: Citation
-}
-export interface QuizQuestion {
-  id: string
-  prompt: string
-  options: string[]
-  /** Index into options. */
-  answer: number
-  explanation?: string
-}
-export interface ComparisonRow {
-  label: string
-  cells: string[]
-}
-
-export type BlockContent =
-  | { type: 'heading'; text: string; level: 1 | 2 | 3 }
-  /** `[n]` in the text refers to block.citations[n − 1]. */
-  | { type: 'paragraph'; text: string }
-  | { type: 'callout'; title: string; body: string; tone: CalloutTone }
-  | { type: 'diagram'; title: string; nodes: DiagramNode[]; edges: DiagramEdge[] }
-  | { type: 'comparison'; title: string; columns: string[]; rows: ComparisonRow[] }
-  | { type: 'flashcards'; cards: Flashcard[] }
-  | { type: 'quiz'; questions: QuizQuestion[] }
-  /** An image source shown in the document. */
-  | { type: 'image'; sourceId: string; caption: string }
-
-export type BlockType = BlockContent['type']
-export const BLOCK_TYPES: BlockType[] = ['heading', 'paragraph', 'callout', 'diagram', 'comparison', 'flashcards', 'quiz', 'image']
-
-export interface Block {
-  id: string
-  content: BlockContent
-  citations: Citation[]
-  by: 'user' | 'agent'
-  createdAt: number
-  updatedAt: number
-}
-
 export type HighlightKind = 'claim' | 'definition' | 'evidence' | 'concept'
 export const HIGHLIGHT_KINDS: HighlightKind[] = ['claim', 'definition', 'evidence', 'concept']
 
@@ -111,13 +56,6 @@ export const HIGHLIGHT_META: Record<HighlightKind, { glyph: string; accent: stri
   concept: { glyph: '◆', accent: 'var(--kind-concept)', wash: 'oklch(0.92 0.06 45 / 0.7)' },
 }
 
-export const CALLOUT_META: Record<CalloutTone, { glyph: string; label: string }> = {
-  idea: { glyph: '◆', label: 'key idea' },
-  example: { glyph: '●', label: 'in practice' },
-  warning: { glyph: '△', label: 'careful' },
-  why: { glyph: '?', label: 'why that was wrong' },
-}
-
 /** What the document is anchored on when the viewer opens. */
 export interface ViewerTarget {
   sourceId: string
@@ -130,43 +68,20 @@ export interface ViewerTarget {
 /** Where a block goes in the document. */
 export type Position = 'end' | 'start' | { after: string } | { before: string } | { inSection: string }
 
-/** What persists for the workspace itself (sources are stored separately). */
+/** What persists for the workspace itself (sources are stored separately). The document is Markdown. */
 export interface WorkspaceDoc {
+  version: 2
   title: string
-  blocks: Block[]
+  markdown: string
   highlights: Highlight[]
+  /** `${blockId}:${questionIndex}` → picked option. */
   quizAnswers: Record<string, number>
+  /** Block ids by position, so answers and metadata survive a reload. */
+  blockIds: string[]
+  blockMeta: Record<string, BlockMeta>
 }
 
-export function blockExcerpt(block: Block, max = 120): string {
-  const c = block.content
-  const text = (() => {
-    switch (c.type) {
-      case 'heading':
-        return c.text
-      case 'paragraph':
-        return c.text
-      case 'callout':
-        return c.title ? `${c.title}: ${c.body}` : c.body
-      case 'diagram':
-        return c.nodes.map((n) => n.label).join(' → ')
-      case 'comparison':
-        return `${c.columns.join(' vs ')} · ${c.rows.map((r) => r.label).join(', ')}`
-      case 'flashcards':
-        return `${c.cards.length} cards: ${c.cards[0]?.question ?? ''}`
-      case 'quiz':
-        return `${c.questions.length} questions: ${c.questions[0]?.prompt ?? ''}`
-      case 'image':
-        return c.caption || 'image'
-    }
-  })()
-  const flat = text.replace(/\s+/g, ' ').trim()
-  return flat.length > max ? `${flat.slice(0, max)}…` : flat
-}
-
-/** Every citation a block carries, including the ones inside nodes and cards. */
-export function citationsOf(block: Block): Citation[] {
-  const c = block.content
-  const nested = c.type === 'diagram' ? c.nodes.map((n) => n.citation) : c.type === 'flashcards' ? c.cards.map((k) => k.citation) : []
-  return [...block.citations, ...nested.filter((x): x is Citation => x !== undefined)]
+export interface BlockMeta {
+  by: 'user' | 'agent'
+  createdAt: number
 }

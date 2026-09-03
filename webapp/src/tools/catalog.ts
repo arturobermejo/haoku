@@ -3,14 +3,17 @@
  * knowledge space. Inputs are phrased the way a person would say them —
  * sources by name or id, pages as printed, passages as quotes — and every
  * failure comes back as data.
+ *
+ * The document is Markdown: blocks are its top-level chunks, interactive ones are
+ * `<space-*>` elements, citations are footnotes `[^k]`. Tools speak in typed content
+ * (validated here) or in raw markdown.
  */
-import { newId } from '../workspace/ids'
 import { sections } from '../workspace/coverage'
-import { ensureMarks } from '../workspace/linking'
+import { BLOCK_KINDS, blockExcerpt, blockToMarkdown, CALLOUT_TONES, citationKeysIn, parseDocument, withCiteMarks, withoutCiteMark, type BlockData, type CalloutTone, type ParsedBlock } from '../workspace/markdown'
 import { insertIndex } from '../workspace/position'
 import type { SourcesApi } from '../workspace/sources'
 import type { WorkspaceApi } from '../workspace/store'
-import { BLOCK_TYPES, blockExcerpt, citationsOf, HIGHLIGHT_KINDS, type Block, type BlockContent, type Citation, type DiagramEdge, type DiagramNode, type HighlightKind, type Position, type Source } from '../workspace/types'
+import { HIGHLIGHT_KINDS, type Citation, type HighlightKind, type Position, type Source } from '../workspace/types'
 
 export interface ToolContext {
   ws: WorkspaceApi
@@ -34,6 +37,7 @@ const str = (o: Obj, k: string) => (typeof o[k] === 'string' && (o[k] as string)
 const int = (o: Obj, k: string) => (typeof o[k] === 'number' && Number.isInteger(o[k]) ? (o[k] as number) : undefined)
 const obj = (v: unknown): Obj | undefined => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Obj) : undefined)
 const arr = (v: unknown): unknown[] | undefined => (Array.isArray(v) ? v : undefined)
+const isFail = (v: unknown): v is ToolResult => !!v && typeof v === 'object' && 'ok' in (v as object)
 
 const sourceParam = { type: 'string', description: 'A source by id (from list_sources) or by file name.' }
 const pageParam = { type: 'integer', minimum: 1, description: 'Page number as printed, starting at 1. Text sources are a single page.' }
@@ -54,16 +58,19 @@ const positionSchema = {
   ],
 }
 
-const CONTENT_SHAPES: Record<BlockContent['type'], string> = {
+const CONTENT_SHAPES: Record<BlockData['kind'], string> = {
   heading: '{ text, level?: 1|2|3 (default 2) }',
-  paragraph: '{ text } — write [1], [2]… in the text to mark where each citation applies',
-  callout: '{ title?, body, tone?: "idea"|"example"|"warning"|"why" (default "idea") }',
+  paragraph: '{ text } — markdown; write [1], [2]… in the text to mark where each citation applies (they become footnotes)',
+  callout: '{ title?, body (markdown), tone?: "idea"|"example"|"warning"|"why" (default "idea") }',
   diagram: '{ title?, nodes: [{ label, citation? }], edges?: [{ from, to, label? }] } — from/to by 1-based node position or label; without edges the nodes form a chain',
   comparison: '{ title?, columns: [string], rows: [{ label, cells: [string] }] }',
   flashcards: '{ cards: [{ question, answer, citation? }] }',
   quiz: '{ questions: [{ prompt, options: [string], answer: 1-based position or the option text, explanation? }] }',
   image: '{ source: an image source (id or name), caption? }',
 }
+
+const MARKDOWN_HELP =
+  'Block markdown: `## heading`, free markdown paragraphs, a GFM table (first column = row labels, optional **title** line above), `![caption](space://<source_id>)`, or an element: <space-callout tone="…" title="…">body</space-callout>, <space-diagram title="…">{"nodes":[{"label"}],"edges":[{"from":0,"to":1}]}</space-diagram>, <space-flashcards>{"cards":[{"question","answer"}]}</space-flashcards>, <space-quiz>{"questions":[{"prompt","options":[…],"answer":0}]}</space-quiz>. Cite with [^k] marks (keys from get_workspace) or list citations and use [1], [2]….'
 
 function sourceOf(ctx: ToolContext, ref: string | undefined): Source | ToolResult {
   if (!ref) return fail('"source" is required.', 'Use an id or a file name from list_sources.')
@@ -77,7 +84,7 @@ async function resolveCitation(ctx: ToolContext, raw: unknown, label = 'citation
   const c = obj(raw)
   if (!c) return fail(`${label} must be an object { source, page?, quote? }.`)
   const source = sourceOf(ctx, str(c, 'source') ?? str(c, 'source_id'))
-  if ('ok' in source) return { ...source, error: `${label}: ${source.error}` }
+  if (isFail(source)) return fail(`${label}: ${(source as { error: string }).error}`, (source as { hint?: string }).hint)
   const quote = str(c, 'quote')
   const occurrence = int(c, 'occurrence') ?? 1
   if (source.kind === 'image') return { sourceId: source.id }
@@ -86,7 +93,7 @@ async function resolveCitation(ctx: ToolContext, raw: unknown, label = 'citation
   if (pages[0] > ctx.sources.pageCount(source.id)) return fail(`${label}: ${source.name} has ${ctx.sources.pageCount(source.id)} page(s); there is no page ${pages[0]}.`)
   for (const page of pages) {
     const hit = await ctx.sources.resolve({ sourceId: source.id, page, quote, occurrence })
-    if (hit) return { sourceId: source.id, page, quote: hit.text, occurrence }
+    if (hit) return { sourceId: source.id, page, quote: hit.text, ...(occurrence > 1 ? { occurrence } : {}) }
   }
   return fail(`${label}: "${quote.slice(0, 60)}${quote.length > 60 ? '…' : ''}" does not appear in ${source.name}${int(c, 'page') ? ` on page ${int(c, 'page')}` : ''}.`, 'Copy the passage from read_source, or find it with search_sources.')
 }
@@ -96,7 +103,7 @@ async function resolveCitations(ctx: ToolContext, raw: unknown): Promise<Citatio
   const out: Citation[] = []
   for (const [i, item] of list.entries()) {
     const c = await resolveCitation(ctx, item, `citation ${i + 1}`)
-    if ('ok' in c) return c
+    if (isFail(c)) return c
     out.push(c)
   }
   return out
@@ -107,35 +114,46 @@ function stringList(v: unknown): string[] | undefined {
   return a && a.every((x) => typeof x === 'string') ? (a as string[]) : undefined
 }
 
+/** Typed content plus the passages nested items cite (nodes, cards), resolved but not yet keyed. */
+interface Parsed {
+  data: BlockData
+  /** Per node / per card, in order; undefined where none. */
+  nested: (Citation | undefined)[]
+  /** Paragraph text still carrying local [n] marks. */
+  localMarks?: boolean
+}
+
 /** Builds typed content from what the agent sent, or explains the expected shape. */
-async function parseContent(ctx: ToolContext, type: string, raw: unknown, base?: BlockContent): Promise<BlockContent | ToolResult> {
+async function parseContent(ctx: ToolContext, type: string, raw: unknown, base?: BlockData): Promise<Parsed | ToolResult> {
   const c = obj(raw) ?? {}
-  const shape = (t: BlockContent['type']) => fail(`"content" for a ${t} is ${CONTENT_SHAPES[t]}.`)
+  const shape = (t: BlockData['kind']) => fail(`"content" for a ${t} is ${CONTENT_SHAPES[t]}.`)
+  const cites = base && 'cites' in base ? base.cites : []
   switch (type) {
     case 'heading': {
-      const text = str(c, 'text') ?? (base?.type === 'heading' ? base.text : undefined)
+      const text = str(c, 'text') ?? (base?.kind === 'heading' ? base.text : undefined)
       if (text === undefined) return shape('heading')
-      const level = int(c, 'level') ?? (base?.type === 'heading' ? base.level : 2)
+      const level = int(c, 'level') ?? (base?.kind === 'heading' ? base.level : 2)
       if (![1, 2, 3].includes(level)) return fail('"level" must be 1, 2 or 3.')
-      return { type: 'heading', text, level: level as 1 | 2 | 3 }
+      return { data: { kind: 'heading', text, level: level as 1 | 2 | 3 }, nested: [] }
     }
     case 'paragraph': {
-      const text = str(c, 'text') ?? (base?.type === 'paragraph' ? base.text : undefined)
+      const text = str(c, 'text') ?? str(c, 'markdown') ?? (base?.kind === 'paragraph' ? base.markdown : undefined)
       if (text === undefined) return shape('paragraph')
-      return { type: 'paragraph', text }
+      return { data: { kind: 'paragraph', markdown: text }, nested: [], localMarks: /\[\d+\]/.test(text) }
     }
     case 'callout': {
-      const body = str(c, 'body') ?? (base?.type === 'callout' ? base.body : undefined)
+      const body = str(c, 'body') ?? (base?.kind === 'callout' ? base.body : undefined)
       if (body === undefined) return shape('callout')
-      const tone = str(c, 'tone') ?? (base?.type === 'callout' ? base.tone : 'idea')
-      if (!['idea', 'example', 'warning', 'why'].includes(tone)) return fail(`"${tone}" is not a tone.`, 'Tones: idea, example, warning, why.')
-      return { type: 'callout', title: str(c, 'title') ?? (base?.type === 'callout' ? base.title : ''), body, tone: tone as 'idea' }
+      const tone = str(c, 'tone') ?? (base?.kind === 'callout' ? base.tone : 'idea')
+      if (!(CALLOUT_TONES as string[]).includes(tone)) return fail(`"${tone}" is not a tone.`, `Tones: ${CALLOUT_TONES.join(', ')}.`)
+      return { data: { kind: 'callout', title: str(c, 'title') ?? (base?.kind === 'callout' ? base.title : ''), body, tone: tone as CalloutTone, cites }, nested: [] }
     }
     case 'diagram': {
       const rawNodes = arr(c.nodes)
-      if (!rawNodes && base?.type === 'diagram') return { ...base, title: str(c, 'title') ?? base.title }
+      if (!rawNodes && base?.kind === 'diagram') return { data: { ...base, title: str(c, 'title') ?? base.title }, nested: [] }
       if (!rawNodes || rawNodes.length === 0) return shape('diagram')
-      const nodes: DiagramNode[] = []
+      const nodes: { label: string }[] = []
+      const nested: (Citation | undefined)[] = []
       for (const [i, n] of rawNodes.entries()) {
         const node = obj(n)
         const label = node && str(node, 'label')
@@ -143,47 +161,49 @@ async function parseContent(ctx: ToolContext, type: string, raw: unknown, base?:
         let citation: Citation | undefined
         if (node.citation !== undefined) {
           const r = await resolveCitation(ctx, node.citation, `node ${i + 1}`)
-          if ('ok' in r) return r
+          if (isFail(r)) return r
           citation = r
         }
-        nodes.push({ id: newId('n'), label, ...(citation ? { citation } : {}) })
+        nodes.push({ label })
+        nested.push(citation)
       }
-      const ref = (v: unknown) => (typeof v === 'number' ? nodes[v - 1] : typeof v === 'string' ? nodes.find((n) => n.label.toLowerCase() === v.toLowerCase()) : undefined)
+      const ref = (v: unknown) => (typeof v === 'number' ? (nodes[v - 1] ? v - 1 : -1) : typeof v === 'string' ? nodes.findIndex((n) => n.label.toLowerCase() === v.toLowerCase()) : -1)
       const rawEdges = arr(c.edges)
-      let edges: DiagramEdge[]
+      let edges: { from: number; to: number; label?: string }[]
       if (rawEdges && rawEdges.length) {
         edges = []
         for (const [i, e] of rawEdges.entries()) {
           const edge = obj(e)
-          const from = edge && ref(edge.from)
-          const to = edge && ref(edge.to)
-          if (!from || !to) return fail(`Edge ${i + 1} refers to a node that does not exist.`, `Nodes: ${nodes.map((n, k) => `${k + 1} "${n.label}"`).join(', ')}.`)
-          edges.push({ from: from.id, to: to.id, ...(edge && str(edge, 'label') ? { label: str(edge, 'label') } : {}) })
+          const from = edge ? ref(edge.from) : -1
+          const to = edge ? ref(edge.to) : -1
+          if (from < 0 || to < 0) return fail(`Edge ${i + 1} refers to a node that does not exist.`, `Nodes: ${nodes.map((n, k) => `${k + 1} "${n.label}"`).join(', ')}.`)
+          edges.push({ from, to, ...(edge && str(edge, 'label') ? { label: str(edge, 'label') } : {}) })
         }
       } else {
-        edges = nodes.slice(1).map((n, i) => ({ from: nodes[i].id, to: n.id }))
+        edges = nodes.slice(1).map((_n, i) => ({ from: i, to: i + 1 }))
       }
-      return { type: 'diagram', title: str(c, 'title') ?? (base?.type === 'diagram' ? base.title : ''), nodes, edges }
+      return { data: { kind: 'diagram', title: str(c, 'title') ?? (base?.kind === 'diagram' ? base.title : ''), nodes, edges, cites }, nested }
     }
     case 'comparison': {
-      const columns = stringList(c.columns) ?? (base?.type === 'comparison' ? base.columns : undefined)
+      const columns = stringList(c.columns) ?? (base?.kind === 'comparison' ? base.columns : undefined)
       const rawRows = arr(c.rows)
       const rows = rawRows
         ? rawRows.map((r) => {
             const row = obj(r)
             return { label: (row && str(row, 'label')) ?? '', cells: (row && stringList(row.cells)) ?? [] }
           })
-        : base?.type === 'comparison'
+        : base?.kind === 'comparison'
           ? base.rows
           : undefined
       if (!columns || !rows || columns.length === 0) return shape('comparison')
-      return { type: 'comparison', title: str(c, 'title') ?? (base?.type === 'comparison' ? base.title : ''), columns, rows: rows.map((r) => ({ label: r.label, cells: columns.map((_, j) => r.cells[j] ?? '') })) }
+      return { data: { kind: 'comparison', title: str(c, 'title') ?? (base?.kind === 'comparison' ? base.title : ''), columns, rows: rows.map((r) => ({ label: r.label, cells: columns.map((_, j) => r.cells[j] ?? '') })) }, nested: [] }
     }
     case 'flashcards': {
       const rawCards = arr(c.cards)
-      if (!rawCards && base?.type === 'flashcards') return base
+      if (!rawCards && base?.kind === 'flashcards') return { data: base, nested: [] }
       if (!rawCards || rawCards.length === 0) return shape('flashcards')
-      const cards = []
+      const cards: { question: string; answer: string }[] = []
+      const nested: (Citation | undefined)[] = []
       for (const [i, k] of rawCards.entries()) {
         const card = obj(k)
         const question = card && str(card, 'question')
@@ -192,16 +212,17 @@ async function parseContent(ctx: ToolContext, type: string, raw: unknown, base?:
         let citation: Citation | undefined
         if (card.citation !== undefined) {
           const r = await resolveCitation(ctx, card.citation, `card ${i + 1}`)
-          if ('ok' in r) return r
+          if (isFail(r)) return r
           citation = r
         }
-        cards.push({ id: newId('c'), question, answer, ...(citation ? { citation } : {}) })
+        cards.push({ question, answer })
+        nested.push(citation)
       }
-      return { type: 'flashcards', cards }
+      return { data: { kind: 'flashcards', cards, cites }, nested }
     }
     case 'quiz': {
       const rawQs = arr(c.questions)
-      if (!rawQs && base?.type === 'quiz') return base
+      if (!rawQs && base?.kind === 'quiz') return { data: base, nested: [] }
       if (!rawQs || rawQs.length === 0) return shape('quiz')
       const questions = []
       for (const [i, q] of rawQs.entries()) {
@@ -212,21 +233,45 @@ async function parseContent(ctx: ToolContext, type: string, raw: unknown, base?:
         const rawAnswer = question.answer
         const answer = typeof rawAnswer === 'number' ? rawAnswer - 1 : typeof rawAnswer === 'string' ? options.findIndex((o) => o.toLowerCase() === rawAnswer.toLowerCase()) : -1
         if (answer < 0 || answer >= options.length) return fail(`Question ${i + 1}: "answer" must be the 1-based position of the right option or its text.`, `Options: ${options.map((o, k) => `${k + 1} "${o}"`).join(', ')}.`)
-        questions.push({ id: newId('q'), prompt, options, answer, ...(str(question, 'explanation') ? { explanation: str(question, 'explanation') } : {}) })
+        questions.push({ prompt, options, answer, ...(str(question, 'explanation') ? { explanation: str(question, 'explanation') } : {}) })
       }
-      return { type: 'quiz', questions }
+      return { data: { kind: 'quiz', questions, cites }, nested: [] }
     }
     case 'image': {
       const ref = str(c, 'source') ?? str(c, 'source_id')
-      if (!ref && base?.type === 'image') return { ...base, caption: str(c, 'caption') ?? base.caption }
+      if (!ref && base?.kind === 'image') return { data: { ...base, caption: str(c, 'caption') ?? base.caption }, nested: [] }
       const source = sourceOf(ctx, ref)
-      if ('ok' in source) return source
+      if (isFail(source)) return source
       if (source.kind !== 'image') return fail(`${source.name} is a ${source.kind}; an image block needs an image source.`)
-      return { type: 'image', sourceId: source.id, caption: str(c, 'caption') ?? (base?.type === 'image' ? base.caption : '') }
+      return { data: { kind: 'image', sourceId: source.id, caption: str(c, 'caption') ?? (base?.kind === 'image' ? base.caption : '') }, nested: [] }
     }
     default:
-      return fail(`"${type}" is not a block type.`, `Types: ${BLOCK_TYPES.join(', ')}.`)
+      return fail(`"${type}" is not a block type.`, `Types: ${BLOCK_KINDS.join(', ')}.`)
   }
+}
+
+const unique = (keys: string[]) => keys.filter((k, i) => keys.indexOf(k) === i)
+
+/**
+ * The block's markdown once its citations have keys: `blockKeys` for block-level citations,
+ * `nestedKeys` per node / card. Paragraph `[n]` marks map to the block-level keys.
+ */
+function markdownFor(parsed: Parsed, blockKeys: string[], nestedKeys: (string | undefined)[]): string {
+  const d = parsed.data
+  if (d.kind === 'paragraph') {
+    let text = d.markdown
+    if (parsed.localMarks) {
+      text = text.replace(/\[(\d+)\]/g, (m, n: string) => {
+        const k = blockKeys[Number(n) - 1]
+        return k ? `[^${k}]` : m
+      })
+    }
+    return withCiteMarks('paragraph', text, blockKeys)
+  }
+  if (d.kind === 'heading' || d.kind === 'image' || d.kind === 'comparison') return withCiteMarks(d.kind, blockToMarkdown(d), blockKeys)
+  if (d.kind === 'diagram') return blockToMarkdown({ ...d, nodes: d.nodes.map((n, i) => ({ ...n, ...(nestedKeys[i] ? { cite: nestedKeys[i] } : {}) })), cites: unique([...d.cites, ...blockKeys]) })
+  if (d.kind === 'flashcards') return blockToMarkdown({ ...d, cards: d.cards.map((c, i) => ({ ...c, ...(nestedKeys[i] ? { cite: nestedKeys[i] } : {}) })), cites: unique([...d.cites, ...blockKeys]) })
+  return blockToMarkdown({ ...d, cites: unique([...d.cites, ...blockKeys]) })
 }
 
 /** The passages the user gathered, when a tool asks for them; clears the basket once used. */
@@ -249,26 +294,40 @@ function parsePosition(raw: unknown): Position | ToolResult {
   return fail('"position" is not valid.', positionSchema.description)
 }
 
-function describeCitation(ctx: ToolContext, c: Citation) {
+function describeCitation(ctx: ToolContext, c: Citation, key?: string) {
   const s = ctx.sources.byId(c.sourceId)
-  return { source_id: c.sourceId, source: s?.name ?? 'removed', ...(c.page ? { page: c.page } : {}), ...(c.quote ? { quote: c.quote } : {}) }
+  return { ...(key ? { key } : {}), source_id: c.sourceId, source: s?.name ?? 'removed', ...(c.page ? { page: c.page } : {}), ...(c.quote ? { quote: c.quote } : {}) }
 }
 
-function describeBlock(ctx: ToolContext, block: Block, full: boolean) {
+function describeBlock(ctx: ToolContext, block: ParsedBlock, full: boolean) {
+  const { kind: _kind, ...content } = block.data
   return {
     id: block.id,
-    type: block.content.type,
-    ...(full ? { content: block.content } : { excerpt: blockExcerpt(block, 160) }),
-    citations: citationsOf(block).map((c) => describeCitation(ctx, c)),
-    by: block.by,
+    type: block.kind,
+    ...(full ? { content, markdown: block.raw } : { excerpt: blockExcerpt(block, 160) }),
+    citations: ctx.ws.citationsOf(block).map((c, i) => describeCitation(ctx, c, block.citationKeys[i])),
+    by: ctx.ws.getState().blockMeta[block.id]?.by ?? 'user',
   }
 }
 
-function blockOf(ctx: ToolContext, id: string | undefined): Block | ToolResult {
+function blockOf(ctx: ToolContext, id: string | undefined): ParsedBlock | ToolResult {
   const block = id ? ctx.ws.blockById(id) : undefined
   if (!block) return fail(`There is no block "${id ?? ''}".`, 'Ids come from get_workspace.')
   return block
 }
+
+/** Raw markdown from the agent must be exactly one block and only use footnote keys that exist. */
+function checkRawBlock(ctx: ToolContext, markdown: string): string | ToolResult {
+  const parsed = parseDocument(markdown)
+  if (parsed.blocks.length !== 1) return fail(`"markdown" must hold exactly one block; it holds ${parsed.blocks.length}.`, 'Blocks are separated by blank lines. Add several blocks with several calls.')
+  const known = ctx.ws.getState().footnotes
+  const unknown = citationKeysIn(markdown).filter((k) => !known.has(k))
+  if (unknown.length) return fail(`Unknown footnote key(s): ${unknown.map((k) => `[^${k}]`).join(', ')}.`, `Known keys: ${[...known.keys()].map((k) => `^${k}`).join(', ') || 'none'} — or pass citations and use [1], [2]….`)
+  return parsed.blocks[0].raw
+}
+
+/** Local `[n]` marks in agent markdown map to the block-level keys, in order. */
+const relinkLocal = (text: string, keys: string[]) => text.replace(/\[(\d+)\]/g, (m, n: string) => (keys[Number(n) - 1] ? `[^${keys[Number(n) - 1]}]` : m))
 
 export const TOOLS: ToolDef[] = [
   {
@@ -286,7 +345,7 @@ export const TOOLS: ToolDef[] = [
         kind: s.kind,
         ...(s.kind === 'pdf' ? { pages: s.pages } : {}),
         bytes: s.bytes,
-        cited_by: blocks.filter((b) => citationsOf(b).some((c) => c.sourceId === s.id)).length,
+        cited_by: blocks.filter((b) => ctx.ws.citationsOf(b).some((c) => c.sourceId === s.id) || (b.data.kind === 'image' && b.data.sourceId === s.id)).length,
       }))
       return { ok: true, summary: list.length ? `${list.length} source(s): ${list.map((s) => s.name).join(', ')}.` : 'No sources yet; the user adds them from the left panel.', sources: list }
     },
@@ -313,7 +372,7 @@ export const TOOLS: ToolDef[] = [
         ids = []
         for (const ref of arr(input.sources)!) {
           const s = sourceOf(ctx, typeof ref === 'string' ? ref : undefined)
-          if ('ok' in s) return s
+          if (isFail(s)) return s
           ids.push(s.id)
         }
       }
@@ -333,7 +392,7 @@ export const TOOLS: ToolDef[] = [
     annotations: { readOnlyHint: true, untrustedContentHint: true },
     execute: async (input, ctx) => {
       const source = sourceOf(ctx, str(input, 'source'))
-      if ('ok' in source) return source
+      if (isFail(source)) return source
       if (source.kind === 'image') {
         const data_url = await ctx.sources.imageDataUrl(source.id)
         return { ok: true, summary: `${source.name}: image.`, source_id: source.id, kind: 'image', data_url }
@@ -347,8 +406,8 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: 'get_selection',
-    title: "What the user is pointing at",
-    description: 'Returns the selected block (id, type, content, citations), any text selected in the document, and any text selected in an open source.',
+    title: 'What the user is pointing at',
+    description: 'Returns the selected block (id, type, content, markdown, citations), any text selected in the document, any text selected in an open source, and the passages the user is gathering.',
     inputSchema: { type: 'object', properties: {} },
     annotations: { readOnlyHint: true },
     execute: async (_input, ctx) => {
@@ -364,7 +423,7 @@ export const TOOLS: ToolDef[] = [
       return {
         ok: true,
         summary: [
-          block ? `${block.content.type} ${block.id} is selected${text ? ' with text highlighted' : ''}.` : text ? 'Text is selected but no block.' : 'Nothing is selected.',
+          block ? `${block.kind} ${block.id} is selected${text ? ' with text highlighted' : ''}.` : text ? 'Text is selected but no block.' : 'Nothing is selected.',
           state.collecting ? ` The user has gathered ${state.collected.length} passage(s)${state.collectTarget ? ` for block ${state.collectTarget}` : ''} — pass use_collected: true to add_block or link_sources to use them.` : '',
         ].join(''),
         block: block ? describeBlock(ctx, block, true) : null,
@@ -378,89 +437,155 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'get_workspace',
     title: 'Read the knowledge space',
-    description: 'Returns the title, the sources, every block in order (id, type, excerpt or full content, citations), the quiz answers so far and which sections are covered.',
-    inputSchema: { type: 'object', properties: { include_content: { type: 'boolean', description: 'Return full block content instead of excerpts. Defaults to false.' } } },
+    description: 'Returns the title, the sources, every block in order (id, type, excerpt or full content + markdown, citations with their footnote keys), the footnotes, the quiz answers so far, which sections are covered, and — with include_markdown — the whole document as markdown.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        include_content: { type: 'boolean', description: 'Return full block content and markdown instead of excerpts. Defaults to false.' },
+        include_markdown: { type: 'boolean', description: 'Also return the whole document as one markdown string (blocks, elements, footnotes).' },
+      },
+    },
     annotations: { readOnlyHint: true },
     execute: async (input, ctx) => {
       const state = ctx.ws.getState()
       const full = input.include_content === true
-      const quiz = state.blocks.filter((b) => b.content.type === 'quiz').flatMap((b) => (b.content.type === 'quiz' ? b.content.questions : [])).map((q) => ({ question_id: q.id, prompt: q.prompt, answered: state.quizAnswers[q.id] !== undefined, correct: state.quizAnswers[q.id] === undefined ? null : state.quizAnswers[q.id] === q.answer }))
+      const quiz = state.blocks.flatMap((b) =>
+        b.data.kind === 'quiz'
+          ? b.data.questions.map((q, i) => {
+              const picked = state.quizAnswers[`${b.id}:${i}`]
+              return { block_id: b.id, question: i + 1, prompt: q.prompt, answered: picked !== undefined, correct: picked === undefined ? null : picked === q.answer }
+            })
+          : [],
+      )
       return {
         ok: true,
         summary: `"${state.title}": ${state.blocks.length} block(s) from ${ctx.sources.sources.length} source(s).${state.collecting ? ` The user has gathered ${state.collected.length} passage(s) (see get_selection).` : ''}`,
         title: state.title,
         sources: ctx.sources.sources.map((s) => ({ id: s.id, name: s.name, kind: s.kind })),
         blocks: state.blocks.map((b) => describeBlock(ctx, b, full)),
+        footnotes: [...state.footnotes].map(([key, c]) => describeCitation(ctx, c, key)),
         sections: sections(state.blocks, state.quizAnswers).map((s) => ({ heading_id: s.headingId, title: s.title, blocks: s.blockCount, status: s.status })),
-        quiz: quiz,
+        quiz,
         selected_block_id: state.selectedBlockId,
         history: { can_undo: state.past.length, can_redo: state.future.length },
+        ...(input.include_markdown === true ? { markdown: state.markdown } : {}),
       }
     },
   },
   {
     name: 'add_block',
     title: 'Add a block to the document',
-    description: `Adds a block and shows it at once. "content" depends on "type": ${Object.entries(CONTENT_SHAPES)
+    description: `Adds a block and shows it at once. Either give "type" and "content" — ${Object.entries(CONTENT_SHAPES)
       .map(([t, s]) => `${t}: ${s}`)
-      .join('; ')}. Cite the sources the block draws on; a paragraph marks where each citation applies with [1], [2]… in its text.`,
+      .join('; ')} — or give raw "markdown" for one block. ${MARKDOWN_HELP}`,
     inputSchema: {
       type: 'object',
       properties: {
-        type: { type: 'string', enum: BLOCK_TYPES },
+        type: { type: 'string', enum: BLOCK_KINDS },
         content: { type: 'object', description: 'Shape depends on type; see the tool description.' },
+        markdown: { type: 'string', description: 'Raw markdown for exactly one block, instead of type + content.' },
         position: positionSchema,
         citations: { type: 'array', items: citationSchema, description: 'Sources this block draws on, in the order the [n] marks refer to.' },
         use_collected: { type: 'boolean', description: 'Also cite the passages the user gathered (get_selection → collecting), before the ones listed here. Clears the basket.' },
       },
-      required: ['type', 'content'],
     },
     execute: async (input, ctx) => {
       const type = str(input, 'type')
-      if (!type) return fail('"type" is required.', `Types: ${BLOCK_TYPES.join(', ')}.`)
-      const content = await parseContent(ctx, type, input.content)
-      if ('ok' in content) return content
+      const rawMd = str(input, 'markdown')
+      if (!type && !rawMd) return fail('Pass "type" and "content", or "markdown".', `Types: ${BLOCK_KINDS.join(', ')}.`)
       const listed = await resolveCitations(ctx, input.citations)
-      if ('ok' in listed) return listed
+      if (isFail(listed)) return listed
       const position = parsePosition(input.position)
-      if (typeof position === 'object' && 'ok' in position) return position
-      const probe = ctx.ws.getState().blocks
-      const idx = insertIndex(probe, position)
+      if (isFail(position)) return position
+      const idx = insertIndex(ctx.ws.getState().blocks, position)
       if (typeof idx !== 'number') return fail(idx.error, 'Ids come from get_workspace.')
-      const citations = [...takeCollected(ctx, input), ...listed]
-      const block = ctx.ws.addBlock({ content, citations, by: 'agent' }, position)
-      if (content.type === 'paragraph') ctx.ws.updateBlock(block.id, ensureMarks)
+      const blockCites = [...takeCollected(ctx, input), ...listed]
+
+      let inserted: ParsedBlock[]
+      if (rawMd) {
+        const raw = checkRawBlock(ctx, rawMd)
+        if (isFail(raw)) return raw
+        const kind = parseDocument(raw).blocks[0].kind
+        inserted = ctx.ws.insertBlock((keys) => withCiteMarks(kind, relinkLocal(raw, keys), keys), position, blockCites, 'agent')
+      } else {
+        const parsed = await parseContent(ctx, type!, input.content)
+        if (isFail(parsed)) return parsed
+        const nested = parsed.nested.filter((c): c is Citation => c !== undefined)
+        inserted = ctx.ws.insertBlock(
+          (keys) => {
+            const nestedKeys: (string | undefined)[] = []
+            let n = blockCites.length
+            for (const c of parsed.nested) nestedKeys.push(c ? keys[n++] : undefined)
+            return markdownFor(parsed, keys.slice(0, blockCites.length), nestedKeys)
+          },
+          position,
+          [...blockCites, ...nested],
+          'agent',
+        )
+      }
+      const block = inserted[0]
+      if (!block) return fail('The block came out empty.')
       const after = ctx.ws.blockById(block.id)!
-      return { ok: true, summary: `Added ${type} ${block.id}${citations.length ? ` citing ${citations.length} passage(s)` : ''}.`, block: describeBlock(ctx, after, false) }
+      return { ok: true, summary: `Added ${after.kind} ${after.id}${after.citationKeys.length ? ` citing ${after.citationKeys.length} passage(s)` : ''}.`, block: describeBlock(ctx, after, false) }
     },
   },
   {
     name: 'update_block',
     title: 'Change a block',
-    description: 'Changes the content or citations of an existing block. Content fields you leave out stay as they are; for diagram, comparison, flashcards and quiz a given collection replaces the old one.',
+    description: 'Changes a block: partial "content" (same shape as add_block for its type; fields left out stay, collections replace), or raw "markdown" for the whole block, and/or "citations" that replace the ones it has.',
     inputSchema: {
       type: 'object',
-      properties: { block_id: { type: 'string' }, content: { type: 'object', description: 'Same shape as add_block for the block\'s type; partial.' }, citations: { type: 'array', items: citationSchema, description: 'Replaces the block\'s citations.' } },
+      properties: {
+        block_id: { type: 'string' },
+        content: { type: 'object', description: "Same shape as add_block for the block's type; partial." },
+        markdown: { type: 'string', description: 'Raw markdown replacing the whole block (one block).' },
+        citations: { type: 'array', items: citationSchema, description: "Replaces the block's citations." },
+      },
       required: ['block_id'],
     },
     execute: async (input, ctx) => {
       const block = blockOf(ctx, str(input, 'block_id'))
-      if ('ok' in block) return block
-      let content = block.content
-      if (input.content !== undefined) {
-        const parsed = await parseContent(ctx, block.content.type, input.content, block.content)
-        if ('ok' in parsed) return parsed
-        content = parsed
-      }
-      let citations = block.citations
+      if (isFail(block)) return block
+      const rawMd = str(input, 'markdown')
+      let citations: Citation[] | undefined
       if (input.citations !== undefined) {
         const parsed = await resolveCitations(ctx, input.citations)
-        if ('ok' in parsed) return parsed
+        if (isFail(parsed)) return parsed
         citations = parsed
       }
-      if (content === block.content && citations === block.citations) return fail('Nothing to change.', 'Pass content or citations.')
-      ctx.ws.updateBlock(block.id, (b) => ({ ...b, content, citations }))
-      return { ok: true, summary: `Updated ${block.content.type} ${block.id}.`, block: describeBlock(ctx, ctx.ws.blockById(block.id)!, false) }
+      let nextRaw: string | undefined
+      let parsed: Parsed | undefined
+      if (rawMd) {
+        const checked = checkRawBlock(ctx, rawMd)
+        if (isFail(checked)) return checked
+        nextRaw = checked
+      } else if (input.content !== undefined) {
+        const p = await parseContent(ctx, block.kind, input.content, block.data)
+        if (isFail(p)) return p
+        parsed = p
+      }
+      if (nextRaw === undefined && !parsed && !citations) return fail('Nothing to change.', 'Pass content, markdown or citations.')
+
+      const nested = parsed?.nested.filter((c): c is Citation => c !== undefined) ?? []
+      ctx.ws.replaceBlock(
+        block.id,
+        (keys) => {
+          const blockKeys = citations ? keys.slice(0, citations.length) : block.citationKeys
+          if (parsed) {
+            const nestedKeys: (string | undefined)[] = []
+            let n = citations ? citations.length : 0
+            for (const c of parsed.nested) nestedKeys.push(c ? keys[n++] : undefined)
+            const data = citations && 'cites' in parsed.data ? { ...parsed.data, cites: [] } : parsed.data
+            return markdownFor({ ...parsed, data }, blockKeys, nestedKeys)
+          }
+          let raw = nextRaw ?? block.raw
+          if (citations) raw = withCiteMarks(block.kind, block.citationKeys.reduce((r, k) => withoutCiteMark(r, k), relinkLocal(raw, blockKeys)), blockKeys)
+          return raw
+        },
+        [...(citations ?? []), ...nested],
+      )
+      const after = ctx.ws.blockById(block.id)
+      return { ok: true, summary: `Updated ${block.kind} ${block.id}.`, ...(after ? { block: describeBlock(ctx, after, false) } : {}) }
     },
   },
   {
@@ -484,13 +609,13 @@ export const TOOLS: ToolDef[] = [
     inputSchema: { type: 'object', properties: { block_id: { type: 'string' }, position: positionSchema }, required: ['block_id', 'position'] },
     execute: async (input, ctx) => {
       const block = blockOf(ctx, str(input, 'block_id'))
-      if ('ok' in block) return block
+      if (isFail(block)) return block
       const position = parsePosition(input.position)
-      if (typeof position === 'object' && 'ok' in position) return position
+      if (isFail(position)) return position
       const idx = insertIndex(ctx.ws.getState().blocks, position, block.id)
       if (typeof idx !== 'number') return fail(idx.error, 'Ids come from get_workspace.')
       ctx.ws.moveBlock(block.id, position)
-      return { ok: true, summary: `Moved ${block.content.type} ${block.id}.`, index: ctx.ws.getState().blocks.findIndex((b) => b.id === block.id) }
+      return { ok: true, summary: `Moved ${block.kind} ${block.id}.`, index: ctx.ws.getState().blocks.findIndex((b) => b.id === block.id) }
     },
   },
   {
@@ -500,9 +625,9 @@ export const TOOLS: ToolDef[] = [
     inputSchema: { type: 'object', properties: { block_id: { type: 'string' } }, required: ['block_id'] },
     execute: async (input, ctx) => {
       const block = blockOf(ctx, str(input, 'block_id'))
-      if ('ok' in block) return block
+      if (isFail(block)) return block
       ctx.ws.focusBlock(block.id)
-      return { ok: true, summary: `Focused ${block.content.type} ${block.id}.` }
+      return { ok: true, summary: `Focused ${block.kind} ${block.id}.` }
     },
   },
   {
@@ -512,10 +637,10 @@ export const TOOLS: ToolDef[] = [
     inputSchema: { type: 'object', properties: { source: sourceParam, page: pageParam, quote: quoteParam, occurrence: { type: 'integer', minimum: 1 } }, required: ['source'] },
     execute: async (input, ctx) => {
       const source = sourceOf(ctx, str(input, 'source'))
-      if ('ok' in source) return source
+      if (isFail(source)) return source
       if (str(input, 'quote')) {
         const citation = await resolveCitation(ctx, { ...input, source: source.id }, 'quote')
-        if ('ok' in citation) return citation
+        if (isFail(citation)) return citation
         ctx.ws.openViewer({ sourceId: source.id, page: citation.page, citation })
         return { ok: true, summary: `Opened ${source.name} at page ${citation.page}, on "${(citation.quote ?? '').slice(0, 50)}".` }
       }
@@ -536,10 +661,10 @@ export const TOOLS: ToolDef[] = [
     },
     execute: async (input, ctx) => {
       const source = sourceOf(ctx, str(input, 'source'))
-      if ('ok' in source) return source
+      if (isFail(source)) return source
       if (source.kind !== 'pdf') return fail(`Only PDFs take highlights; ${source.name} is a ${source.kind}.`, 'Cite the passage in a block instead.')
       const citation = await resolveCitation(ctx, { ...input, source: source.id }, 'quote')
-      if ('ok' in citation) return citation
+      if (isFail(citation)) return citation
       const resolved = await ctx.sources.resolve(citation)
       if (!resolved) return fail('The passage could not be placed on the page.')
       const kind = (str(input, 'kind') ?? 'claim') as HighlightKind
@@ -548,12 +673,10 @@ export const TOOLS: ToolDef[] = [
       return { ok: true, summary: `Highlighted "${resolved.text.slice(0, 50)}…" on page ${resolved.page} of ${source.name} as ${kind}.`, id: h.id, page: resolved.page }
     },
   },
-]
-
-TOOLS.push({
+  {
     name: 'link_sources',
     title: 'Link passages to a block',
-    description: 'Attaches passages from the sources to an existing block, keeping what it already cites: the ones listed and/or the ones the user gathered. A paragraph gets a [n] mark per passage at the end of its text unless you place the marks yourself with update_block.',
+    description: 'Attaches passages from the sources to an existing block, keeping what it already cites: the ones listed and/or the ones the user gathered. Text blocks get a [^k] mark per passage at the end; elements get them in their cites attribute. Place marks yourself with update_block if you want them elsewhere.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -564,26 +687,27 @@ TOOLS.push({
     },
     execute: async (input, ctx) => {
       const block = blockOf(ctx, str(input, 'block_id') ?? ctx.ws.getState().collectTarget ?? undefined)
-      if ('ok' in block) return block
+      if (isFail(block)) return block
       const listed = await resolveCitations(ctx, input.passages)
-      if ('ok' in listed) return listed
+      if (isFail(listed)) return listed
       const citations = [...takeCollected(ctx, input), ...listed]
       if (citations.length === 0) return fail('Nothing to link.', 'List passages ({ source, page?, quote? }) or pass use_collected: true.')
-      ctx.ws.linkSources(block.id, citations)
+      const keys = ctx.ws.linkSources(block.id, citations)
       const after = ctx.ws.blockById(block.id)!
-      return { ok: true, summary: `Linked ${citations.length} passage(s) to ${block.content.type} ${block.id}; it now cites ${after.citations.length}.`, block: describeBlock(ctx, after, false) }
+      return { ok: true, summary: `Linked ${citations.length} passage(s) to ${block.kind} ${block.id} as ${keys.map((k) => `[^${k}]`).join(' ')}; it now cites ${after.citationKeys.length}.`, keys, block: describeBlock(ctx, after, false) }
     },
-  })
+  },
+]
 
 /** What changed between two snapshots, in words an agent can act on. */
-function diffSummary(before: Block[], after: Block[]) {
+function diffSummary(before: ParsedBlock[], after: ParsedBlock[]) {
   const a = new Map(before.map((b) => [b.id, b]))
   const b = new Map(after.map((x) => [x.id, x]))
-  const label = (x: Block) => `${x.content.type} ${x.id}`
+  const label = (x: ParsedBlock) => `${x.kind} ${x.id}`
   return {
     restored: after.filter((x) => !a.has(x.id)).map(label),
     removed: before.filter((x) => !b.has(x.id)).map(label),
-    changed: after.filter((x) => a.has(x.id) && a.get(x.id) !== x).map(label),
+    changed: after.filter((x) => a.has(x.id) && a.get(x.id)!.raw !== x.raw).map(label),
   }
 }
 
