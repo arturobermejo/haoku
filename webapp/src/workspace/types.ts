@@ -79,6 +79,32 @@ export interface WorkspaceDoc {
   /** Block ids by position, so answers and metadata survive a reload. */
   blockIds: string[]
   blockMeta: Record<string, BlockMeta>
+  /** The practice bank: questions and cards outside the document. */
+  practice?: PracticeItem[]
+  /** Per practice item (bank items and document questions alike). */
+  practiceProgress?: Record<string, PracticeProgress>
+}
+
+/** A multiple-choice question in the practice bank. */
+export interface PracticeItem {
+  id: string
+  prompt: string
+  options: string[]
+  /** 0-based index into options. */
+  answer: number
+  explanation?: string
+  citation?: Citation
+  topic?: string
+  by: 'user' | 'agent'
+  createdAt: number
+}
+
+export interface PracticeProgress {
+  seen: number
+  right: number
+  wrong: number
+  /** Timestamp of the last attempt. */
+  last: number
 }
 
 export interface BlockMeta {

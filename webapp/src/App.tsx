@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ContextPanel } from './components/ContextPanel'
 import { Document } from './components/Document'
+import { Practice } from './components/Practice'
 import { SourcesPanel } from './components/SourcesPanel'
 import { SourceViewer } from './components/SourceViewer'
 import { TopBar } from './components/TopBar'
@@ -33,6 +34,8 @@ function Shell() {
   const compact = useMediaQuery('(max-width: 759px)')
   const [showSources, setShowSources] = useState(true)
   const [showContext, setShowContext] = useState(true)
+  const [mode, setMode] = useState<'study' | 'practice'>('study')
+  const centre = mode === 'practice' ? <Practice /> : <Document />
 
   // `space://<sourceId>` images in the markdown resolve to the stored files.
   useEffect(() => {
@@ -83,28 +86,28 @@ function Shell() {
   let className: string
   if (merged) {
     // One rail carries both panels; with a source open it steps aside (or, when compact, so does the document).
-    const railOpen = (showSources || showContext) && !(ws.viewer && !compact)
+    const railOpen = (showSources || (showContext && mode === 'study')) && !(ws.viewer && !compact)
     className = ['app', compact ? 'app--compact' : 'app--merged', railOpen ? '' : 'app--no-rail', ws.viewer ? 'app--viewer' : ''].filter(Boolean).join(' ')
     body = (
       <>
         {railOpen && (
           <aside className="rail">
             {showSources && <SourcesPanel />}
-            {showContext && <ContextPanel />}
+            {showContext && mode === 'study' && <ContextPanel />}
           </aside>
         )}
         {railOpen && compact && <div className="rail-backdrop" onClick={closeRail} />}
-        <Document />
+        {centre}
         {viewer}
       </>
     )
   } else {
-    const right = viewer ?? (showContext ? <ContextPanel /> : null)
+    const right = viewer ?? (showContext && mode === 'study' ? <ContextPanel /> : null)
     className = ['app', showSources ? '' : 'app--no-sources', right ? '' : 'app--no-right', ws.viewer ? 'app--viewer' : ''].filter(Boolean).join(' ')
     body = (
       <>
         {showSources && <SourcesPanel />}
-        <Document />
+        {centre}
         {right}
       </>
     )
@@ -112,7 +115,7 @@ function Shell() {
 
   return (
     <div className={className}>
-      <TopBar showSources={showSources} showContext={showContext} onToggleSources={() => setShowSources((v) => !v)} onToggleContext={() => setShowContext((v) => !v)} />
+      <TopBar mode={mode} onMode={setMode} showSources={showSources} showContext={showContext} onToggleSources={() => setShowSources((v) => !v)} onToggleContext={() => setShowContext((v) => !v)} />
       <div className="shell">{body}</div>
       <ToolsBridge />
       <ToolActivityBadge />

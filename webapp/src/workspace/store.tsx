@@ -4,7 +4,7 @@ import { blockToMarkdown, citationKeysIn, isLegacyDoc, migrateLegacy, nextKey, p
 import { insertIndex } from './position'
 import { useSources } from './sources'
 import { loadWorkspaceDoc, saveWorkspaceDoc } from './storage'
-import type { BlockMeta, Citation, Highlight, Position, ViewerTarget, WorkspaceDoc } from './types'
+import type { BlockMeta, Citation, Highlight, Position, PracticeItem, PracticeProgress, ViewerTarget, WorkspaceDoc } from './types'
 
 /**
  * The document is a Markdown string; `blocks` and `footnotes` are derived from it (and kept in the
@@ -24,6 +24,8 @@ interface State extends Snapshot {
   quizAnswers: Record<string, number>
   revealed: Record<string, boolean>
   blockMeta: Record<string, BlockMeta>
+  practice: PracticeItem[]
+  practiceProgress: Record<string, PracticeProgress>
   rawView: boolean
   selectedBlockId: string | null
   collecting: boolean
@@ -56,6 +58,10 @@ type Action =
   | { type: 'answerQuiz'; key: string; option: number }
   | { type: 'reveal'; key: string; revealed: boolean }
   | { type: 'setRawView'; on: boolean }
+  | { type: 'addPractice'; items: PracticeItem[] }
+  | { type: 'removePractice'; ids: string[] }
+  | { type: 'gradePractice'; id: string; correct: boolean }
+  | { type: 'resetPractice' }
   | { type: 'select'; id: string | null }
   | { type: 'startCollecting'; target: string | null }
   | { type: 'stopCollecting' }
@@ -77,6 +83,8 @@ const initial: State = {
   quizAnswers: {},
   revealed: {},
   blockMeta: {},
+  practice: [],
+  practiceProgress: {},
   rawView: false,
   selectedBlockId: null,
   collecting: false,
@@ -89,13 +97,13 @@ const initial: State = {
 }
 
 const HISTORY_LIMIT = 100
-const VIEW_ACTIONS = new Set<Action['type']>(['load', 'reset', 'answerQuiz', 'reveal', 'setRawView', 'select', 'startCollecting', 'stopCollecting', 'collect', 'uncollect', 'focus', 'openViewer', 'closeViewer', 'undo', 'redo'])
+const VIEW_ACTIONS = new Set<Action['type']>(['load', 'reset', 'answerQuiz', 'reveal', 'setRawView', 'addPractice', 'removePractice', 'gradePractice', 'resetPractice', 'select', 'startCollecting', 'stopCollecting', 'collect', 'uncollect', 'focus', 'openViewer', 'closeViewer', 'undo', 'redo'])
 
 const snapshot = (s: State): Snapshot => ({ title: s.title, markdown: s.markdown, highlights: s.highlights, blocks: s.blocks, footnotes: s.footnotes })
 
-function fromDoc(doc: WorkspaceDoc): Pick<State, 'title' | 'markdown' | 'highlights' | 'blocks' | 'footnotes' | 'quizAnswers' | 'blockMeta'> {
+function fromDoc(doc: WorkspaceDoc): Pick<State, 'title' | 'markdown' | 'highlights' | 'blocks' | 'footnotes' | 'quizAnswers' | 'blockMeta' | 'practice' | 'practiceProgress'> {
   const parsed = parseDocument(doc.markdown, { ids: doc.blockIds })
-  return { title: doc.title, markdown: doc.markdown, highlights: doc.highlights ?? [], blocks: parsed.blocks, footnotes: parsed.footnotes, quizAnswers: doc.quizAnswers ?? {}, blockMeta: doc.blockMeta ?? {} }
+  return { title: doc.title, markdown: doc.markdown, highlights: doc.highlights ?? [], blocks: parsed.blocks, footnotes: parsed.footnotes, quizAnswers: doc.quizAnswers ?? {}, blockMeta: doc.blockMeta ?? {}, practice: doc.practice ?? [], practiceProgress: doc.practiceProgress ?? {} }
 }
 
 function restore(state: State, snap: Snapshot): State {
@@ -145,6 +153,18 @@ function apply(state: State, action: Action): State {
       return { ...state, revealed: { ...state.revealed, [action.key]: action.revealed } }
     case 'setRawView':
       return { ...state, rawView: action.on }
+    case 'addPractice':
+      return { ...state, practice: [...state.practice, ...action.items] }
+    case 'removePractice': {
+      const gone = new Set(action.ids)
+      return { ...state, practice: state.practice.filter((it) => !gone.has(it.id)) }
+    }
+    case 'gradePractice': {
+      const p = state.practiceProgress[action.id] ?? { seen: 0, right: 0, wrong: 0, last: 0 }
+      return { ...state, practiceProgress: { ...state.practiceProgress, [action.id]: { seen: p.seen + 1, right: p.right + (action.correct ? 1 : 0), wrong: p.wrong + (action.correct ? 0 : 1), last: Date.now() } } }
+    }
+    case 'resetPractice':
+      return { ...state, practiceProgress: {} }
     case 'select':
       return { ...state, selectedBlockId: action.id }
     case 'startCollecting':
@@ -205,6 +225,12 @@ export interface WorkspaceApi extends State {
   answerQuiz: (blockId: string, questionIndex: number, option: number) => void
   reveal: (blockId: string, cardIndex: number, revealed: boolean) => void
   setRawView: (on: boolean) => void
+  /** Adds questions to the practice bank; returns them with ids. */
+  addPractice: (items: Omit<PracticeItem, 'id' | 'createdAt'>[]) => PracticeItem[]
+  removePractice: (ids: string[]) => void
+  /** Records an attempt on a bank question or a document quiz question. */
+  gradePractice: (id: string, correct: boolean) => void
+  resetPractice: () => void
   select: (id: string | null) => void
   startCollecting: (target?: string | null) => void
   stopCollecting: () => void
@@ -255,15 +281,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
   }, [dispatch, sources.loaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { loaded, title, markdown, highlights, quizAnswers, blocks, blockMeta } = state
+  const { loaded, title, markdown, highlights, quizAnswers, blocks, blockMeta, practice, practiceProgress } = state
   useEffect(() => {
     if (!loaded) return
     const handle = setTimeout(() => {
-      const doc: WorkspaceDoc = { version: 2, title, markdown, highlights, quizAnswers, blockIds: blocks.map((b) => b.id), blockMeta }
+      const doc: WorkspaceDoc = { version: 2, title, markdown, highlights, quizAnswers, blockIds: blocks.map((b) => b.id), blockMeta, practice, practiceProgress }
       saveWorkspaceDoc(doc).catch((err: unknown) => console.error('could not save workspace', err))
     }, SAVE_DELAY)
     return () => clearTimeout(handle)
-  }, [loaded, title, markdown, highlights, quizAnswers, blocks, blockMeta])
+  }, [loaded, title, markdown, highlights, quizAnswers, blocks, blockMeta, practice, practiceProgress])
 
   const api = useMemo<WorkspaceApi>(() => {
     // ---- pure helpers over the latest state ----
@@ -383,6 +409,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       answerQuiz: (blockId, questionIndex, option) => dispatch({ type: 'answerQuiz', key: `${blockId}:${questionIndex}`, option }),
       reveal: (blockId, cardIndex, revealed) => dispatch({ type: 'reveal', key: `${blockId}:${cardIndex}`, revealed }),
       setRawView: (on) => dispatch({ type: 'setRawView', on }),
+      addPractice: (partials) => {
+        const now = Date.now()
+        const items: PracticeItem[] = partials.map((p) => ({ ...p, id: newId('p'), createdAt: now }))
+        dispatch({ type: 'addPractice', items })
+        return items
+      },
+      removePractice: (ids) => dispatch({ type: 'removePractice', ids }),
+      gradePractice: (id, correct) => dispatch({ type: 'gradePractice', id, correct }),
+      resetPractice: () => dispatch({ type: 'resetPractice' }),
       select: (id) => dispatch({ type: 'select', id }),
       startCollecting: (target = null) => dispatch({ type: 'startCollecting', target }),
       stopCollecting: () => dispatch({ type: 'stopCollecting' }),

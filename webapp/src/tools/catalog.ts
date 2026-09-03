@@ -13,7 +13,8 @@ import { BLOCK_KINDS, blockExcerpt, blockToMarkdown, CALLOUT_TONES, citationKeys
 import { insertIndex } from '../workspace/position'
 import type { SourcesApi } from '../workspace/sources'
 import type { WorkspaceApi } from '../workspace/store'
-import { HIGHLIGHT_KINDS, type Citation, type HighlightKind, type Position, type Source } from '../workspace/types'
+import { HIGHLIGHT_KINDS, type Citation, type HighlightKind, type Position, type PracticeItem, type Source } from '../workspace/types'
+import { buildDeck, progressSummary } from '../workspace/practice'
 
 export interface ToolContext {
   ws: WorkspaceApi
@@ -698,6 +699,96 @@ export const TOOLS: ToolDef[] = [
     },
   },
 ]
+
+
+// ---- practice: multiple-choice questions outside the document, for the practice tab ----
+
+const practiceItemSchema = {
+  type: 'object',
+  description: 'A multiple-choice question { prompt, options: [string], answer: 1-based position or the option text, explanation?, citation?, topic? }.',
+  properties: {
+    prompt: { type: 'string' },
+    options: { type: 'array', items: { type: 'string' }, minItems: 2 },
+    answer: { description: '1-based position of the right option, or its text.' },
+    explanation: { type: 'string', description: 'Shown after answering.' },
+    citation: { ...citationSchema, description: 'The passage the question checks; shown as "source →" while practising.' },
+    topic: { type: 'string', description: 'A short label to group questions (usually a section title).' },
+  },
+  required: ['prompt', 'options', 'answer'],
+}
+
+function describePractice(ctx: ToolContext, it: PracticeItem) {
+  return { id: it.id, prompt: it.prompt, options: it.options, answer: it.answer + 1, ...(it.explanation ? { explanation: it.explanation } : {}), ...(it.topic ? { topic: it.topic } : {}), ...(it.citation ? { citation: describeCitation(ctx, it.citation) } : {}), by: it.by }
+}
+
+TOOLS.push(
+  {
+    name: 'add_practice',
+    title: 'Add practice questions',
+    description: 'Adds multiple-choice questions to the practice bank (the "practice" tab), outside the document. Tie each one to the passage it checks with a citation. Quiz questions that live in the space are practised too, so use this for extra drilling material.',
+    inputSchema: {
+      type: 'object',
+      properties: { items: { type: 'array', items: practiceItemSchema, minItems: 1 } },
+      required: ['items'],
+    },
+    execute: async (input, ctx) => {
+      const raw = arr(input.items)
+      if (!raw || raw.length === 0) return fail('"items" must list at least one question.', practiceItemSchema.description)
+      const items: Parameters<WorkspaceApi['addPractice']>[0] = []
+      for (const [i, r] of raw.entries()) {
+        const it = obj(r)
+        const prompt = it && str(it, 'prompt')
+        const options = it && stringList(it.options)
+        if (!it || !prompt || !options || options.length < 2) return fail(`Question ${i + 1} needs a prompt and at least two options.`, practiceItemSchema.description)
+        const rawAnswer = it.answer
+        const answer = typeof rawAnswer === 'number' ? rawAnswer - 1 : typeof rawAnswer === 'string' ? options.findIndex((o) => o.toLowerCase() === rawAnswer.toLowerCase()) : -1
+        if (answer < 0 || answer >= options.length) return fail(`Question ${i + 1}: "answer" must be the 1-based position of the right option or its text.`, `Options: ${options.map((o, k) => `${k + 1} "${o}"`).join(', ')}.`)
+        let citation: Citation | undefined
+        if (it.citation !== undefined) {
+          const c = await resolveCitation(ctx, it.citation, `question ${i + 1}`)
+          if (isFail(c)) return c
+          citation = c
+        }
+        const topic = str(it, 'topic')
+        items.push({ prompt, options, answer, ...(str(it, 'explanation') ? { explanation: str(it, 'explanation') } : {}), ...(citation ? { citation } : {}), ...(topic ? { topic } : {}), by: 'agent' })
+      }
+      const added = ctx.ws.addPractice(items)
+      return { ok: true, summary: `Added ${added.length} practice question(s). The user finds them in the practice tab.`, items: added.map((a) => describePractice(ctx, a)) }
+    },
+  },
+  {
+    name: 'list_practice',
+    title: 'Read the practice questions and progress',
+    description: 'Returns the practice questions (bank questions plus the ones drawn from the quizzes in the space) with how the user has done on each: seen, right, wrong.',
+    inputSchema: { type: 'object', properties: {} },
+    annotations: { readOnlyHint: true },
+    execute: async (_input, ctx) => {
+      const state = ctx.ws.getState()
+      const deck = buildDeck(state.blocks, state.footnotes, state.practice)
+      const summary = progressSummary(deck, state.practiceProgress)
+      const items = deck.map((it) => {
+        const p = state.practiceProgress[it.id]
+        return { id: it.id, origin: it.origin, prompt: it.prompt, options: it.options, answer: it.answer + 1, ...(it.topic ? { topic: it.topic } : {}), ...(it.citation ? { citation: describeCitation(ctx, it.citation) } : {}), progress: p ? { seen: p.seen, right: p.right, wrong: p.wrong } : { seen: 0, right: 0, wrong: 0 } }
+      })
+      return { ok: true, summary: `${deck.length} practice question(s): ${summary.mastered} mastered, ${summary.struggling} to review, ${summary.unseen} unseen.`, ...summary, items }
+    },
+  },
+  {
+    name: 'remove_practice',
+    title: 'Remove practice questions',
+    description: 'Removes questions from the practice bank by id (ids from list_practice; questions that come from the space are removed by editing the space).',
+    inputSchema: { type: 'object', properties: { ids: { type: 'array', items: { type: 'string' }, minItems: 1 } }, required: ['ids'] },
+    execute: async (input, ctx) => {
+      const ids = stringList(input.ids)
+      if (!ids || ids.length === 0) return fail('"ids" must list at least one id.')
+      const bank = new Set(ctx.ws.getState().practice.map((it) => it.id))
+      const missing = ids.filter((id) => !bank.has(id))
+      if (missing.length) return fail(`Not in the practice bank: ${missing.join(', ')}.`, 'Only bank questions (ids starting with p_) can be removed here.')
+      ctx.ws.removePractice(ids)
+      return { ok: true, summary: `Removed ${ids.length} practice question(s).`, removed: ids }
+    },
+  },
+)
 
 /** What changed between two snapshots, in words an agent can act on. */
 function diffSummary(before: ParsedBlock[], after: ParsedBlock[]) {

@@ -1,0 +1,204 @@
+.practice-page {
+  max-width: 760px;
+}
+.practice-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.practice-filters {
+  display: flex;
+  gap: 6px;
+}
+.practice-stats {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 28px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-45);
+}
+.practice-stats b {
+  font-weight: 500;
+  color: var(--ink);
+}
+.practice-reset {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--ink-25);
+  cursor: pointer;
+}
+.practice-reset:hover {
+  color: var(--kind-question);
+}
+.practice-empty {
+  padding: 60px 0;
+  max-width: 480px;
+}
+.practice-card {
+  padding: 26px 30px 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--paper);
+  box-shadow: var(--shadow-card);
+  animation: appear 220ms var(--ease) both;
+}
+.practice-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+.practice-progress-bar {
+  flex: 1;
+  height: 2px;
+  background: var(--line);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.practice-progress-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--ink);
+  transition: width 200ms var(--ease);
+}
+.practice-progress-text {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-45);
+  white-space: nowrap;
+}
+.practice-prompt {
+  font-family: var(--font-document);
+  font-size: 21px;
+  line-height: 1.45;
+  color: var(--ink);
+  margin-bottom: 20px;
+  text-wrap: pretty;
+}
+.practice-options {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.practice-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--paper);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  color: var(--ink-85);
+  text-align: left;
+  cursor: pointer;
+}
+.practice-option:hover:not(:disabled) {
+  background: var(--sunken);
+  border-color: var(--border-hover);
+}
+.practice-option:disabled {
+  cursor: default;
+}
+.practice-option.is-answer {
+  background: oklch(0.5 0.1 155 / 0.1);
+  border-color: oklch(0.5 0.1 155 / 0.4);
+  color: var(--ink);
+}
+.practice-option.is-picked {
+  background: oklch(0.56 0.15 20 / 0.08);
+  border-color: oklch(0.56 0.15 20 / 0.35);
+  color: var(--kind-question);
+}
+.practice-option-glyph {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-45);
+}
+.practice-feedback {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed rgba(0, 0, 0, 0.12);
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink-85);
+}
+.practice-verdict {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--kind-evidence);
+}
+.practice-feedback.is-wrong .practice-verdict {
+  color: var(--kind-question);
+}
+.practice-answer {
+  padding: 16px 0 4px;
+  border-top: 1px dashed rgba(0, 0, 0, 0.12);
+  font-family: var(--font-document);
+  font-size: 18px;
+  line-height: 1.6;
+  color: var(--ink-85);
+}
+.practice-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 22px;
+}
+.practice-actions-spacer {
+  flex: 1;
+}
+.practice-source,
+.practice-skip {
+  border: 0;
+  background: none;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  color: var(--ink-45);
+  cursor: pointer;
+}
+.practice-source:hover {
+  color: var(--link);
+}
+.practice-skip:hover {
+  color: var(--ink);
+}
+.practice-done {
+  text-align: center;
+  padding: 50px 30px;
+}
+.practice-done-title {
+  font-family: var(--font-document);
+  font-size: 26px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.practice-done-body {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-45);
+}
+.practice-done .practice-actions {
+  justify-content: center;
+}

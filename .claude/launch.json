@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "saoku",
+      "name": "haoku",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--prefix", "webapp", "--", "--strictPort", "--port", "5173"],
       "port": 5173
