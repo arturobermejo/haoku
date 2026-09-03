@@ -71,14 +71,14 @@ window.haoku.tools.status()  // { supported, api, registered, failed, error }
 Node 22 or newer.
 
 ```bash
-npm install --prefix webapp
-npm run dev --prefix webapp
+npm install
+npm run dev
 ```
 
 Then open http://localhost:5173. With no sources, the left panel offers **load demo sources**: three
 short papers on memory in AI agents, generated for the demo, plus a diagram and a page of notes.
 
-Other scripts, all under `webapp/`:
+The other scripts:
 
 | script | what it does |
 |---|---|
@@ -92,7 +92,7 @@ Other scripts, all under `webapp/`:
 ## Exporting
 
 - **`.md`** — the document with its footnotes renumbered. Interactive blocks keep working in any
-  Markdown renderer that allows HTML if `space-elements.js` is on the page; `webapp/public/elements-demo.html`
+  Markdown renderer that allows HTML if `space-elements.js` is on the page; `public/elements-demo.html`
   is a working example.
 - **A zip** — `document.md`, `space.json` (title, highlights, practice bank, source metadata), the
   source files themselves, and the `space-*` bundle. Importing it restores the space, including old
@@ -102,7 +102,7 @@ Other scripts, all under `webapp/`:
 ## Layout of the code
 
 ```
-webapp/src
+src/
   workspace/     the document as Markdown: parse, serialize, citations, storage, exchange
   workspace/markdown/  the whole format, framework-free and unit-tested
   elements/      the <space-*> web components, also built as a standalone bundle
