@@ -1,10 +1,11 @@
-import { useRef, useState, type ChangeEvent, type DragEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 import { sections } from '../workspace/coverage'
-import { DEMO_TITLE, fetchDemoFiles } from '../workspace/demo'
+import { buildDemoProject, DEMO_SOURCES, DEMO_TITLE, fetchDemoFiles } from '../workspace/demo'
 import { useSources } from '../workspace/sources'
 import { urlLabel } from '../workspace/urls'
 import { useWorkspace } from '../workspace/store'
 import type { Source } from '../workspace/types'
+import { ConfirmDialog } from './ConfirmDialog'
 import './SourcesPanel.css'
 
 const KIND_BADGE: Record<Source['kind'], string> = { pdf: 'PDF', text: 'TXT', image: 'IMG' }
@@ -30,6 +31,9 @@ export function SourcesPanel({ onPaste }: { onPaste: () => void }) {
   const [dragging, setDragging] = useState(false)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<{ text: string; bad: boolean } | null>(null)
+  const [confirmDemo, setConfirmDemo] = useState(false)
+  // The document is built after the sources are in: the API only reads a source once it is in state.
+  const awaitingSources = useRef(false)
 
   const addFiles = async (files: File[]) => {
     if (files.length === 0) return
@@ -43,23 +47,46 @@ export function SourcesPanel({ onPaste }: { onPaste: () => void }) {
     }
   }
 
+  /** The demo sources first; the document that cites them is built in the effect below. */
   const loadDemo = async () => {
     setBusy(true)
     setMessage(null)
     try {
       const files = await fetchDemoFiles(api.sources.map((s) => s.name))
-      if (files.length === 0) {
-        setMessage({ text: 'the demo sources are already here', bad: false })
+      const { rejected } = await api.add(files)
+      if (rejected.length) {
+        setMessage({ text: rejected.map((r) => `${r.name}: ${r.reason}`).join(' · '), bad: true })
+        setBusy(false)
         return
       }
-      const { rejected } = await api.add(files)
-      if (rejected.length) setMessage({ text: rejected.map((r) => `${r.name}: ${r.reason}`).join(' · '), bad: true })
-      if (ws.blocks.length === 0 && (ws.title === 'Untitled space' || !ws.title.trim())) ws.setTitle(DEMO_TITLE)
+      awaitingSources.current = true
     } catch (err: unknown) {
-      setMessage({ text: err instanceof Error ? err.message : 'could not load the demo sources', bad: true })
-    } finally {
+      setMessage({ text: err instanceof Error ? err.message : 'could not load the demo project', bad: true })
       setBusy(false)
     }
+  }
+
+  useEffect(() => {
+    if (!awaitingSources.current) return
+    if (!DEMO_SOURCES.every((d) => api.sources.some((s) => s.name === d.file))) return
+    awaitingSources.current = false
+    buildDemoProject(api)
+      .then((project) => {
+        if (!project) {
+          setMessage({ text: 'the demo sources are here, but the document could not be built', bad: true })
+          return
+        }
+        ws.replaceDoc({ version: 2, title: DEMO_TITLE, markdown: project.markdown, highlights: [], blockIds: [], blockMeta: {}, practice: project.practice, practiceProgress: {} })
+        setMessage({ text: `demo project loaded · ${project.practice.length} practice questions`, bad: false })
+      })
+      .catch((err: unknown) => setMessage({ text: err instanceof Error ? err.message : 'could not build the demo document', bad: true }))
+      .finally(() => setBusy(false))
+  }, [api, ws])
+
+  // Loading it replaces the document, so a space with something in it gets a question first.
+  const askDemo = () => {
+    if (ws.blocks.length > 0 || ws.practice.length > 0) setConfirmDemo(true)
+    else void loadDemo()
   }
 
   const onChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -124,13 +151,26 @@ export function SourcesPanel({ onPaste }: { onPaste: () => void }) {
         {api.sources.length === 0 && (
           <>
             {' · '}
-            <button type="button" className="sources-demo" onClick={() => void loadDemo()} disabled={busy}>
-              load demo sources
+            <button type="button" className="sources-demo" onClick={askDemo} disabled={busy}>
+              load demo project
             </button>
           </>
         )}
       </div>
       {message && <div className={`sources-message${message.bad ? '' : ' sources-message--ok'}`}>{message.text}</div>}
+
+      {confirmDemo && (
+        <ConfirmDialog
+          title="Load the demo project?"
+          body="It adds the demo sources and replaces the document and the practice questions in this space."
+          confirmLabel="load it"
+          onConfirm={() => {
+            setConfirmDemo(false)
+            void loadDemo()
+          }}
+          onCancel={() => setConfirmDemo(false)}
+        />
+      )}
 
       {covered.length > 0 && (
         <>
