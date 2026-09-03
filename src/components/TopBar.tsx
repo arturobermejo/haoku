@@ -116,7 +116,7 @@ export function TopBar({ mode, onMode, showSources, showContext, onToggleSources
     <header className="topbar">
       <div className="topbar-brand">
         <span className="topbar-mark" aria-hidden="true" />
-        <span className="topbar-name">haoku</span>
+        <span className="topbar-name">Haoku</span>
       </div>
 
       <div className="topbar-document">

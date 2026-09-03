@@ -6,7 +6,7 @@ import type { BlockMeta, Highlight, PracticeItem, PracticeProgress, Source, Work
 /**
  * A space export: `document.md` (the markdown, title first, footnotes renumbered), `space.json`
  * (metadata, highlights, the practice bank, sources) and every source file under `sources/`, plus the
- * `space-elements.js` bundle so the markdown is interactive outside haoku.
+ * `space-elements.js` bundle so the markdown is interactive outside Haoku.
  */
 export const SPACE_FORMAT = 'haoku-space'
 /** The manifest format written before the product was renamed; still imported. */
@@ -55,7 +55,7 @@ const ELEMENT_FILES = ['space-elements.js', 'space-elements.css']
 export function exportMarkdown(doc: WorkspaceDoc, sources: SourcesApi): string {
   const parsed = parseDocument(doc.markdown, { ids: doc.blockIds })
   const md = serializeDocument(parsed.blocks, parsed.footnotes, { renumber: true, title: doc.title, sourceName: (id) => sources.byId(id)?.name ?? id })
-  return `${md}\n<!-- interactive blocks (space-callout, space-diagram) need space-elements.js from haoku -->\n`
+  return `${md}\n<!-- interactive blocks (space-callout, space-diagram) need space-elements.js from Haoku -->\n`
 }
 
 export async function exportSpace(doc: WorkspaceDoc, sources: SourcesApi): Promise<Blob> {
@@ -98,10 +98,10 @@ export function remapSourceIds(markdown: string, map: Map<string, string>): stri
 export async function importSpace(file: File, sources: SourcesApi): Promise<ImportedSpace> {
   const entries = unzipSync(new Uint8Array(await file.arrayBuffer()))
   const raw = entries['space.json']
-  if (!raw) throw new Error('not a haoku space: space.json is missing')
+  if (!raw) throw new Error('not a Haoku space: space.json is missing')
   const manifest = JSON.parse(strFromU8(raw)) as Partial<SpaceManifest>
-  if (manifest.format !== SPACE_FORMAT && manifest.format !== LEGACY_FORMAT) throw new Error('not a haoku space: unexpected manifest')
-  if ((manifest.version ?? 0) > SPACE_VERSION) throw new Error(`this space was exported by a newer haoku (format ${manifest.version})`)
+  if (manifest.format !== SPACE_FORMAT && manifest.format !== LEGACY_FORMAT) throw new Error('not a Haoku space: unexpected manifest')
+  if ((manifest.version ?? 0) > SPACE_VERSION) throw new Error(`this space was exported by a newer Haoku (format ${manifest.version})`)
 
   const restorable: { meta: Source; blob: Blob }[] = []
   const names = new Map<string, string>()
@@ -125,7 +125,7 @@ export async function importSpace(file: File, sources: SourcesApi): Promise<Impo
   } else if (isLegacyDoc({ blocks: manifest.blocks })) {
     const legacy = migrateLegacy({ title: manifest.title ?? 'Imported space', blocks: manifest.blocks ?? [], highlights: manifest.highlights }, nameOf)
     doc = { ...legacy, markdown: remapSourceIds(legacy.markdown, map) }
-  } else throw new Error('not a haoku space: no document inside')
+  } else throw new Error('not a Haoku space: no document inside')
   doc.highlights = doc.highlights.map((h) => ({ ...h, sourceId: map.get(h.sourceId) ?? h.sourceId }))
 
   let added = 0
