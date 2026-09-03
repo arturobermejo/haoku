@@ -164,7 +164,6 @@ function apply(state: State, action: Action): State {
 export interface NewBlock {
   content: BlockContent
   citations?: Citation[]
-  note?: string
   by?: 'user' | 'agent'
 }
 
@@ -248,7 +247,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       reset: () => dispatch({ type: 'reset' }),
       addBlock: (partial, position = 'end') => {
         const now = Date.now()
-        const block: Block = { id: newId('b'), content: partial.content, citations: partial.citations ?? [], by: partial.by ?? 'user', createdAt: now, updatedAt: now, ...(partial.note ? { note: partial.note } : {}) }
+        const block: Block = { id: newId('b'), content: partial.content, citations: partial.citations ?? [], by: partial.by ?? 'user', createdAt: now, updatedAt: now }
         dispatch({ type: 'addBlock', block, position })
         return block
       },

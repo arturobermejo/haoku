@@ -1,5 +1,3 @@
-import { useSyncExternalStore } from 'react'
-import { getActivity, subscribeActivity } from '../tools/webmcp'
 import { sections } from '../workspace/coverage'
 import { useSources } from '../workspace/sources'
 import { useWorkspace } from '../workspace/store'
@@ -30,11 +28,9 @@ function blockTitle(block: Block): string {
 export function ContextPanel() {
   const ws = useWorkspace()
   const sourcesApi = useSources()
-  const activity = useSyncExternalStore(subscribeActivity, getActivity)
   const block = ws.selectedBlockId ? ws.blocks.find((b) => b.id === ws.selectedBlockId) : undefined
 
   const cites: Citation[] = block ? citationsOf(block) : []
-  const recent = [...activity.running.map((r) => ({ ...r, pending: true })), ...activity.finished.map((r) => ({ ...r, pending: false }))].slice(0, 5)
   const covered = sections(ws.blocks, ws.quizAnswers)
 
   return (
@@ -76,12 +72,6 @@ export function ContextPanel() {
             </div>
           )}
 
-          {block.note && (
-            <>
-              <div className="panel-label context-section">agent note</div>
-              <div className="context-note">{block.note}</div>
-            </>
-          )}
         </>
       ) : (
         <div className="context-card">
@@ -94,22 +84,6 @@ export function ContextPanel() {
         </div>
       )}
 
-      <div className="panel-label context-section">recent tool calls</div>
-      {recent.length === 0 ? (
-        <div className="context-empty">none yet</div>
-      ) : (
-        <div className="context-calls">
-          {recent.map((r) => (
-            <div key={r.id} className={`context-call${r.pending ? ' is-pending' : r.ok === false ? ' is-failed' : ''}`} title={r.summary}>
-              <span className="context-call-dot" />
-              <span className="context-call-name">
-                {r.name}
-                {r.detail !== undefined && <span className="context-call-arg">({JSON.stringify(r.detail)})</span>}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
     </aside>
   )
 }

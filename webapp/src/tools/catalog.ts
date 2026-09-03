@@ -260,7 +260,6 @@ function describeBlock(ctx: ToolContext, block: Block, full: boolean) {
     type: block.content.type,
     ...(full ? { content: block.content } : { excerpt: blockExcerpt(block, 160) }),
     citations: citationsOf(block).map((c) => describeCitation(ctx, c)),
-    ...(block.note ? { note: block.note } : {}),
     by: block.by,
   }
 }
@@ -379,7 +378,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'get_workspace',
     title: 'Read the knowledge space',
-    description: 'Returns the title, the sources, every block in order (id, type, excerpt or full content, citations, note), the quiz answers so far and which sections are covered.',
+    description: 'Returns the title, the sources, every block in order (id, type, excerpt or full content, citations), the quiz answers so far and which sections are covered.',
     inputSchema: { type: 'object', properties: { include_content: { type: 'boolean', description: 'Return full block content instead of excerpts. Defaults to false.' } } },
     annotations: { readOnlyHint: true },
     execute: async (input, ctx) => {
@@ -413,7 +412,6 @@ export const TOOLS: ToolDef[] = [
         position: positionSchema,
         citations: { type: 'array', items: citationSchema, description: 'Sources this block draws on, in the order the [n] marks refer to.' },
         use_collected: { type: 'boolean', description: 'Also cite the passages the user gathered (get_selection → collecting), before the ones listed here. Clears the basket.' },
-        note: { type: 'string', description: 'Why this block exists, in one or two sentences; shown to the user in the context panel.' },
       },
       required: ['type', 'content'],
     },
@@ -430,7 +428,7 @@ export const TOOLS: ToolDef[] = [
       const idx = insertIndex(probe, position)
       if (typeof idx !== 'number') return fail(idx.error, 'Ids come from get_workspace.')
       const citations = [...takeCollected(ctx, input), ...listed]
-      const block = ctx.ws.addBlock({ content, citations, note: str(input, 'note'), by: 'agent' }, position)
+      const block = ctx.ws.addBlock({ content, citations, by: 'agent' }, position)
       if (content.type === 'paragraph') ctx.ws.updateBlock(block.id, ensureMarks)
       const after = ctx.ws.blockById(block.id)!
       return { ok: true, summary: `Added ${type} ${block.id}${citations.length ? ` citing ${citations.length} passage(s)` : ''}.`, block: describeBlock(ctx, after, false) }
@@ -439,10 +437,10 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'update_block',
     title: 'Change a block',
-    description: 'Changes the content, citations or note of an existing block. Content fields you leave out stay as they are; for diagram, comparison, flashcards and quiz a given collection replaces the old one.',
+    description: 'Changes the content or citations of an existing block. Content fields you leave out stay as they are; for diagram, comparison, flashcards and quiz a given collection replaces the old one.',
     inputSchema: {
       type: 'object',
-      properties: { block_id: { type: 'string' }, content: { type: 'object', description: 'Same shape as add_block for the block\'s type; partial.' }, citations: { type: 'array', items: citationSchema, description: 'Replaces the block\'s citations.' }, note: { type: 'string' } },
+      properties: { block_id: { type: 'string' }, content: { type: 'object', description: 'Same shape as add_block for the block\'s type; partial.' }, citations: { type: 'array', items: citationSchema, description: 'Replaces the block\'s citations.' } },
       required: ['block_id'],
     },
     execute: async (input, ctx) => {
@@ -460,9 +458,8 @@ export const TOOLS: ToolDef[] = [
         if ('ok' in parsed) return parsed
         citations = parsed
       }
-      const note = str(input, 'note')
-      if (content === block.content && citations === block.citations && note === undefined) return fail('Nothing to change.', 'Pass content, citations or note.')
-      ctx.ws.updateBlock(block.id, (b) => ({ ...b, content, citations, ...(note !== undefined ? { note } : {}) }))
+      if (content === block.content && citations === block.citations) return fail('Nothing to change.', 'Pass content or citations.')
+      ctx.ws.updateBlock(block.id, (b) => ({ ...b, content, citations }))
       return { ok: true, summary: `Updated ${block.content.type} ${block.id}.`, block: describeBlock(ctx, ctx.ws.blockById(block.id)!, false) }
     },
   },

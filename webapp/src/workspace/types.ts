@@ -84,8 +84,6 @@ export interface Block {
   id: string
   content: BlockContent
   citations: Citation[]
-  /** The agent's note on why the block exists; shown in the context panel. */
-  note?: string
   by: 'user' | 'agent'
   createdAt: number
   updatedAt: number
