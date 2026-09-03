@@ -151,9 +151,6 @@
   font-size: 10px;
   color: var(--kind-evidence);
 }
-.covered-row--shaky .covered-mark {
-  color: var(--kind-claim);
-}
 .covered-row--open .covered-mark {
   color: var(--ink-25);
 }

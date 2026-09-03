@@ -59,7 +59,7 @@ export function ContextPanel() {
                 <div key={i}>{passage(c, null, () => ws.uncollect(i), 'drop this passage')}</div>
               ))}
             </div>
-            <div className="context-hint">“+ from sources” under the document turns these into a paragraph, callout, diagram, flashcards or quiz{block && block.kind !== 'heading' ? `, or links them to the selected ${block.kind}` : ''}.</div>
+            <div className="context-hint">“+ from sources” under the document turns these into a paragraph, callout, diagram or table{block && block.kind !== 'heading' ? `, or links them to the selected ${block.kind}` : ''}.</div>
           </>
         )}
       </div>

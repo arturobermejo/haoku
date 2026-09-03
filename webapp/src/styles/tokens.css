@@ -37,8 +37,6 @@
   --kind-claim-hl: oklch(0.91 0.09 85 / 0.8);
   --kind-definition: oklch(0.55 0.14 300);
   --kind-definition-hl: oklch(0.9 0.07 300 / 0.72);
-  --kind-flashcard: oklch(0.55 0.1 200);
-  --kind-flashcard-hl: oklch(0.9 0.06 200 / 0.8);
   --kind-question: oklch(0.56 0.15 20);
   --kind-evidence: oklch(0.5 0.1 155);
   --kind-evidence-hl: oklch(0.95 0.03 155 / 0.6);

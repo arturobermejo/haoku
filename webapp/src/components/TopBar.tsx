@@ -47,8 +47,8 @@ export function TopBar({ mode, onMode, showSources, showContext, onToggleSources
   }, [notice])
 
   const currentDoc = () => {
-    const { title, markdown, highlights, quizAnswers, blocks, blockMeta, practice, practiceProgress } = ws.getState()
-    return { version: 2 as const, title, markdown, highlights, quizAnswers, blockIds: blocks.map((b) => b.id), blockMeta, practice, practiceProgress }
+    const { title, markdown, highlights, blocks, blockMeta, practice, practiceProgress } = ws.getState()
+    return { version: 2 as const, title, markdown, highlights, blockIds: blocks.map((b) => b.id), blockMeta, practice, practiceProgress }
   }
 
   const exportMd = () => {

@@ -77,14 +77,8 @@ export function FromSourcesTray({ onClose }: { onClose: () => void }) {
         <button type="button" className="control" disabled={!has} onClick={() => make((keys) => ({ kind: 'callout', tone: 'idea', title: '', body: '', cites: keys }))}>
           callout
         </button>
-        <button type="button" className="control" disabled={!has} onClick={() => make((_keys, keyOf) => ({ kind: 'flashcards', cards: textual.map((c) => ({ question: '', answer: c.quote ?? '', cite: keyOf(c) })), cites: [] }))}>
-          flashcards
-        </button>
         <button type="button" className="control" disabled={!has} onClick={() => make((_keys, keyOf) => ({ kind: 'diagram', title: '', nodes: textual.map((c) => ({ label: short(c), cite: keyOf(c) })), edges: [], cites: [] }))}>
           diagram
-        </button>
-        <button type="button" className="control" disabled={!has} onClick={() => make((keys) => ({ kind: 'quiz', questions: textual.map((c) => ({ prompt: '', options: ['', ''], answer: 0, explanation: c.quote })), cites: keys }))}>
-          quiz
         </button>
         {images.length > 0 && (
           <button type="button" className="control" onClick={() => make(() => ({ kind: 'image', sourceId: images[0].sourceId, caption: '' }))}>
