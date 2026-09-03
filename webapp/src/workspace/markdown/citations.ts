@@ -74,8 +74,6 @@ export function withCiteMarks(kind: BlockKind, raw: string, keys: string[]): str
     }
     case 'callout':
     case 'diagram':
-    case 'flashcards':
-    case 'quiz':
       return setCitesAttr(raw, [...citesAttr(raw), ...fresh])
     default: {
       const lines = raw.split('\n')
@@ -114,7 +112,7 @@ function setCitesAttr(raw: string, keys: string[]): string {
   return raw.replace(/^(<space-\w+\b[^>]*?)(\s*\/?>)/, (_m, open: string, close: string) => `${open}${attr}${close}`)
 }
 
-/** Every key a block's data refers to (element `cites`, node/card `cite`). */
+/** Every key a block's data refers to (element `cites`, node `cite`). */
 export function keysInData(data: BlockData): string[] {
   const keys: string[] = []
   const push = (k?: string) => {
@@ -122,6 +120,5 @@ export function keysInData(data: BlockData): string[] {
   }
   if ('cites' in data) data.cites.forEach(push)
   if (data.kind === 'diagram') data.nodes.forEach((n) => push(n.cite))
-  if (data.kind === 'flashcards') data.cards.forEach((c) => push(c.cite))
   return keys
 }

@@ -46,10 +46,6 @@ export function blockToMarkdown(data: BlockData): string {
         { title: data.title, cites: data.cites.join(' ') || undefined },
         json({ nodes: data.nodes.map((n) => ({ label: n.label, ...(n.cite ? { cite: n.cite } : {}) })), edges: data.edges.map((e) => ({ from: e.from, to: e.to, ...(e.label ? { label: e.label } : {}) })) }),
       )
-    case 'flashcards':
-      return element('flashcards', { cites: data.cites.join(' ') || undefined }, json({ cards: data.cards.map((c) => ({ question: c.question, answer: c.answer, ...(c.cite ? { cite: c.cite } : {}) })) }))
-    case 'quiz':
-      return element('quiz', { cites: data.cites.join(' ') || undefined }, json({ questions: data.questions.map((q) => ({ prompt: q.prompt, options: q.options, answer: q.answer, ...(q.explanation ? { explanation: q.explanation } : {}) })) }))
   }
 }
 

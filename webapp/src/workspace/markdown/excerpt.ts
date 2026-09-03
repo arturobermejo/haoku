@@ -28,10 +28,6 @@ export function blockExcerpt(block: ParsedBlock, max = 120): string {
         return d.nodes.map((n) => n.label).join(' → ')
       case 'comparison':
         return `${d.columns.join(' vs ')} · ${d.rows.map((r) => r.label).join(', ')}`
-      case 'flashcards':
-        return `${d.cards.length} cards: ${d.cards[0]?.question ?? ''}`
-      case 'quiz':
-        return `${d.questions.length} questions: ${d.questions[0]?.prompt ?? ''}`
       case 'image':
         return d.caption || 'image'
     }
@@ -52,10 +48,6 @@ export function blockTitle(block: ParsedBlock): string {
       return plainText(d.title) || blockExcerpt(block, 60)
     case 'paragraph':
       return blockExcerpt(block, 70)
-    case 'flashcards':
-      return `${d.cards.length} flashcards`
-    case 'quiz':
-      return `${d.questions.length}-question quiz`
     case 'image':
       return plainText(d.caption) || 'image'
   }
@@ -71,10 +63,6 @@ export function blockLabel(block: ParsedBlock): string | null {
       return 'diagram'
     case 'comparison':
       return 'comparison'
-    case 'flashcards':
-      return `flashcards · ${d.cards.length}`
-    case 'quiz':
-      return `test yourself · ${d.questions.length}`
     default:
       return null
   }
