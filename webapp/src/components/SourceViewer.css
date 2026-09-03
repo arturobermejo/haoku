@@ -1,0 +1,94 @@
+.viewer {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+.viewer-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(14px);
+}
+.viewer-badge {
+  flex: none;
+  padding: 2px 6px;
+  border-radius: var(--radius-marker);
+  background: var(--kind-evidence);
+  color: var(--paper);
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.viewer-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--ink-85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.viewer-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.viewer-controls .control {
+  padding: 0 8px;
+  min-width: 27px;
+}
+.viewer-body {
+  position: relative;
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+}
+.viewer-empty {
+  padding: 40px 20px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-25);
+}
+
+.text-source {
+  margin: 0;
+  padding: 32px 36px 80px;
+  background: var(--paper);
+  min-height: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--font-document);
+  font-size: 15.5px;
+  line-height: 1.7;
+  color: var(--ink);
+}
+.text-source mark {
+  background: var(--selection);
+  color: inherit;
+  border-radius: 2px;
+  animation: appear var(--dur-appear) var(--ease) both;
+}
+
+.image-source {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: var(--paper);
+}
+.image-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--ink-45);
+}

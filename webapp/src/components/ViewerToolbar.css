@@ -1,0 +1,56 @@
+.viewer-toolbar {
+  position: fixed;
+  z-index: var(--z-dock);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-card-selected);
+  backdrop-filter: blur(12px);
+  animation: appear 160ms var(--ease) both;
+}
+.viewer-kinds {
+  display: flex;
+  gap: 2px;
+  padding-right: 4px;
+}
+.viewer-kind {
+  width: 24px;
+  height: 24px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-marker);
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 10px;
+}
+.viewer-kind.is-active {
+  border-color: var(--accent);
+  background: var(--sunken);
+}
+.viewer-action {
+  height: 26px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--radius-control);
+  background: none;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-85);
+}
+.viewer-action:hover {
+  background: var(--sunken);
+  color: var(--ink);
+}
+.viewer-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--line-strong);
+  margin: 0 2px;
+}
