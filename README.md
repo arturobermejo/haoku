@@ -37,6 +37,8 @@ On load the app registers 19 tools on `document.modelContext` (falling back to t
 `navigator.modelContext`), and the `webmcp` chip in the top bar turns on with the count. WebMCP
 needs a secure context, so HTTPS or localhost.
 
+The full reference, with what each tool returns, is in [webmcp.md](webmcp.md).
+
 | | tools |
 |---|---|
 | Sources | `list_sources`, `search_sources`, `read_source`, `open_source`, `highlight_source` |
