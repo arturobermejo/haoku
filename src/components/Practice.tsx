@@ -16,10 +16,15 @@ export function Practice() {
   const [index, setIndex] = useState(0)
   const [picked, setPicked] = useState<number | null>(null)
   const [tally, setTally] = useState({ right: 0, wrong: 0 })
+  const [dropping, setDropping] = useState<string | null>(null)
 
   const deck = useMemo(() => buildDeck(ws.practice), [ws.practice])
-  // The order is fixed for a round; the progress it was built from only matters at the start.
-  const order = useMemo(() => orderForPractice(deck, ws.getState().practiceProgress), [deck, round]) // eslint-disable-line react-hooks/exhaustive-deps
+  // The order is fixed for a round: built when the round starts (the progress only matters then), and
+  // a question that is removed drops out of it instead of reshuffling what is left.
+  const [built, setBuilt] = useState<{ round: number; order: DeckItem[] }>({ round: -1, order: [] })
+  if (built.round !== round || (built.order.length === 0 && deck.length > 0)) setBuilt({ round, order: orderForPractice(deck, ws.getState().practiceProgress) })
+  const live = new Set(deck.map((d) => d.id))
+  const order = built.order.filter((q) => live.has(q.id))
   const summary = progressSummary(deck, ws.practiceProgress)
   const current: DeckItem | undefined = order[index]
   const done = order.length > 0 && index >= order.length
@@ -28,10 +33,23 @@ export function Practice() {
     setRound((r) => r + 1)
     setIndex(0)
     setPicked(null)
+    setDropping(null)
     setTally({ right: 0, wrong: 0 })
   }
   const advance = () => {
     setIndex((i) => i + 1)
+    setPicked(null)
+    setDropping(null)
+  }
+  /** Removing is permanent, so the button asks once; the next question takes this place. */
+  const remove = () => {
+    if (!current) return
+    if (dropping !== current.id) {
+      setDropping(current.id)
+      return
+    }
+    ws.removePractice([current.id])
+    setDropping(null)
     setPicked(null)
   }
   const pick = (option: number) => {
@@ -133,6 +151,9 @@ export function Practice() {
                   {sourceLabel(current)} →
                 </button>
               )}
+              <button type="button" className={`practice-remove${dropping === current.id ? ' is-armed' : ''}`} onClick={remove} title="remove this question from the bank">
+                {dropping === current.id ? 'remove it?' : 'remove'}
+              </button>
               <span className="practice-actions-spacer" />
               {picked !== null ? (
                 <button type="button" className="control control--primary" onClick={advance}>
