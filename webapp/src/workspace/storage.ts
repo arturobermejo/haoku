@@ -1,4 +1,5 @@
 import { run, STORES } from '../storage/db'
+import type { LegacyDoc } from './markdown/legacy'
 import type { Source, WorkspaceDoc } from './types'
 
 interface StoredSource {
@@ -20,8 +21,9 @@ export function deleteStoredSource(id: string): Promise<void> {
   return run(STORES.sources, 'readwrite', (store) => store.delete(id)).then(() => undefined)
 }
 
-export function loadWorkspaceDoc(): Promise<WorkspaceDoc | null> {
-  return run<WorkspaceDoc | undefined>(STORES.workspace, 'readonly', (store) => store.get(WORKSPACE_KEY)).then((doc) => doc ?? null)
+/** The stored document: the current markdown shape, or the pre-markdown block list, which the store migrates. */
+export function loadWorkspaceDoc(): Promise<WorkspaceDoc | LegacyDoc | null> {
+  return run<WorkspaceDoc | LegacyDoc | undefined>(STORES.workspace, 'readonly', (store) => store.get(WORKSPACE_KEY)).then((doc) => doc ?? null)
 }
 
 export function saveWorkspaceDoc(doc: WorkspaceDoc): Promise<void> {
