@@ -54,7 +54,7 @@ def footer(label):
     return draw
 
 def build(name, story, label, margins=2.2*cm):
-    doc = SimpleDocTemplate(os.path.join(OUT, name), pagesize=A4, leftMargin=margins, rightMargin=margins, topMargin=2.2*cm, bottomMargin=2.2*cm, title=label, author='saoku demo')
+    doc = SimpleDocTemplate(os.path.join(OUT, name), pagesize=A4, leftMargin=margins, rightMargin=margins, topMargin=2.2*cm, bottomMargin=2.2*cm, title=label, author='haoku demo')
     doc.build(story, onFirstPage=footer(label), onLaterPages=footer(label))
 
 # ---------- Figure: memory architecture ----------
@@ -147,7 +147,7 @@ def paper():
     s.append(P('The taxonomy of memory we use is standard in cognitive psychology (Atkinson and Shiffrin, 1968; Tulving, 1972; Baddeley and Hitch, 1974). Retrieval-augmented generation retrieves documents rather than the agent\'s own past, but the machinery is the same and our read path is a special case. Several recent agent frameworks include a memory module; what distinguishes ours is the insistence on a minimal design with an explicit consolidation step and an explicit account of failure modes.'))
 
     s.append(Paragraph('7 Note on this document', st['h1']))
-    s.append(P('This is a demonstration document written for the saoku knowledge workspace. The authors are fictional and the numbers in Table 2 are illustrative rather than measured. The architecture and the failure modes, however, describe real and common patterns in agent design and are intended to be read, cited and questioned as such.'))
+    s.append(P('This is a demonstration document written for the haoku knowledge workspace. The authors are fictional and the numbers in Table 2 are illustrative rather than measured. The architecture and the failure modes, however, describe real and common patterns in agent design and are intended to be read, cited and questioned as such.'))
 
     s.append(Paragraph('References', st['h1']))
     for r in [
