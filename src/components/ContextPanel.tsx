@@ -18,7 +18,11 @@ export function ContextPanel() {
   const blockRef = useRef<HTMLDivElement>(null)
   const block = ws.selectedBlockId ? ws.blocks.find((b) => b.id === ws.selectedBlockId) : undefined
   const marks = block ? ws.marksOf(block) : []
-  const gathered = ws.collected
+  // A gathered passage is free until some block cites it; the two are kept apart so neither the user
+  // nor the agent builds something new out of material that is already in the document.
+  const gathered = ws.collected.map((citation, index) => ({ citation, index, used: ws.blocksCiting(citation) }))
+  const free = gathered.filter((g) => g.used.length === 0)
+  const used = gathered.filter((g) => g.used.length > 0)
   // Selecting a block puts its passages on screen: the gathered list above can be long. The section is
   // keyed by the block, so it remounts and its highlight animation replays on every new selection.
   useEffect(() => {
@@ -95,7 +99,7 @@ export function ContextPanel() {
     <aside className="panel panel--right context-panel scroll">
       <div className="context-head">
         <span className="panel-label">context</span>
-        <span className="panel-label context-kind">{gathered.length > 0 ? `${gathered.length} gathered` : block ? block.kind : 'workspace'}</span>
+        <span className="panel-label context-kind">{gathered.length > 0 ? `${free.length} free of ${gathered.length}` : block ? block.kind : 'workspace'}</span>
       </div>
 
       <div className="context-gathered">
@@ -111,17 +115,42 @@ export function ContextPanel() {
           <div className="context-empty">open a source, select text and press “add to context”</div>
         ) : (
           <>
-            <div className="context-sources">
-              {gathered.map((c, i) => (
-                <div key={i}>
-                  {passage(c, null, () => ws.uncollect(i), 'drop this passage', (event) => {
-                    event.dataTransfer.setData('application/x-haoku-passage', String(i))
-                    event.dataTransfer.effectAllowed = 'link'
-                  })}
+            {free.length === 0 ? (
+              <div className="context-empty">nothing free — every passage here is already in the document</div>
+            ) : (
+              <>
+                <div className="context-sources">
+                  {free.map(({ citation, index }) => (
+                    <div key={index}>
+                      {passage(citation, null, () => ws.uncollect(index), 'drop this passage', (event) => {
+                        event.dataTransfer.setData('application/x-haoku-passage', String(index))
+                        event.dataTransfer.effectAllowed = 'link'
+                      })}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-            <div className="context-hint">“+ from sources” under the document turns these into a paragraph, callout, diagram or table{block ? `, or drag one onto the ${block.kind} below to cite it there` : ''}.</div>
+                <div className="context-hint">“+ from sources” under the document turns these into a paragraph, callout, diagram or table{block ? `, or drag one onto the ${block.kind} below to cite it there` : ''}.</div>
+              </>
+            )}
+
+            {used.length > 0 && (
+              <>
+                <div className="panel-label context-used-head">already in the document</div>
+                <div className="context-sources">
+                  {used.map(({ citation, index, used: blocks }) => (
+                    <div key={index} className="context-used">
+                      {passage(citation, null, () => ws.uncollect(index), 'drop this passage', (event) => {
+                        event.dataTransfer.setData('application/x-haoku-passage', String(index))
+                        event.dataTransfer.effectAllowed = 'link'
+                      })}
+                      <button type="button" className="context-used-where" onClick={() => ws.focusBlock(blocks[0].id)}>
+                        cited in {blocks.length === 1 ? `a ${blocks[0].kind}` : `${blocks.length} blocks`} →
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </>
         )}
       </div>
