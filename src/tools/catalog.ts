@@ -234,18 +234,34 @@ function markdownFor(parsed: Parsed, blockKeys: string[], nestedKeys: (string | 
 }
 
 /**
- * The passages the user gathered in the context, when a tool asks for them. Only the free ones: a
- * passage some block already cites is material that is in the document, not material to build with.
- * The basket is emptied either way.
+ * What the user gathered in the context is the material a new block is built from, so it is used by
+ * default; `use_collected: false` opts out. Only the free ones: a passage some block already cites is
+ * material that is in the document, not material to build with. The basket is emptied either way.
  */
 function takeCollected(ctx: ToolContext, input: Obj): { citations: Citation[]; skipped: number } {
-  if (input.use_collected !== true) return { citations: [], skipped: 0 }
+  if (input.use_collected === false) return { citations: [], skipped: 0 }
   const collected = ctx.ws.getState().collected
   const citations = collected.filter((c) => ctx.ws.blocksCiting(c).length === 0)
   if (collected.length) ctx.ws.clearCollected()
   return { citations, skipped: collected.length - citations.length }
 }
+const freeOf = (ctx: ToolContext, citations: Citation[]) => citations.filter((c) => ctx.ws.blocksCiting(c).length === 0)
 const skippedNote = (skipped: number) => (skipped ? ` ${skipped} gathered passage(s) were left out: the document already cites them.` : '')
+
+/**
+ * A passage already in the document belongs to the block that cites it, so it cannot back another
+ * one: the call fails instead of quietly duplicating the evidence. `self` is the block being changed,
+ * which may of course keep its own citations.
+ */
+function checkFree(ctx: ToolContext, citations: Citation[], self?: string): ToolResult | null {
+  for (const c of citations) {
+    const taken = ctx.ws.blocksCiting(c).filter((b) => b.id !== self)
+    if (!taken.length) continue
+    const what = c.quote ? `"${c.quote.length > 60 ? `${c.quote.slice(0, 60)}…` : c.quote}"` : (ctx.sources.byId(c.sourceId)?.name ?? c.sourceId)
+    return fail(`${what} is already cited by ${taken[0].kind} ${taken[0].id}${taken.length > 1 ? ` and ${taken.length - 1} more` : ''}.`, 'Every passage backs one block: cite a different one, or work on that block with update_block or link_sources.')
+  }
+  return null
+}
 
 function parsePosition(raw: unknown): Position | ToolResult {
   if (raw === undefined || raw === 'end') return 'end'
@@ -373,7 +389,7 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'get_selection',
     title: 'What the user is pointing at',
-    description: 'Returns the selected block (id, type, content, markdown, citations), any text selected in the document, any text selected in an open source, and the passages the user is gathering.',
+    description: 'Where the user is right now: the selected block (id, type, content, markdown, citations), any text selected in the document, any text selected in an open source, which source is open, and how many passages wait in the context. Read the passages themselves with list_context.',
     inputSchema: { type: 'object', properties: {} },
     annotations: { readOnlyHint: true },
     execute: async (_input, ctx) => {
@@ -390,19 +406,37 @@ export const TOOLS: ToolDef[] = [
         ok: true,
         summary: [
           block ? `${block.kind} ${block.id} is selected${text ? ' with text highlighted' : ''}.` : text ? 'Text is selected but no block.' : 'Nothing is selected.',
-          state.collected.length ? ` The user has gathered ${state.collected.length} passage(s) in the context, ${state.collected.filter((c) => ctx.ws.blocksCiting(c).length === 0).length} of them free — pass use_collected: true to add_block or link_sources to build with the free ones.` : '',
+          state.collected.length ? ` ${state.collected.length} passage(s) wait in the context, ${freeOf(ctx, state.collected).length} of them free — read them with list_context.` : '',
         ].join(''),
         block: block ? describeBlock(ctx, block, true) : null,
-        gathered: state.collected.length
-          ? state.collected.map((c) => {
-              const cited = ctx.ws.blocksCiting(c)
-              // free: gathered and not in the document yet, so it is material for a new block.
-              return { ...describeCitation(ctx, c), free: cited.length === 0, ...(cited.length ? { cited_by: cited.map((b) => b.id) } : {}) }
-            })
-          : null,
+        gathered: state.collected.length ? { total: state.collected.length, free: freeOf(ctx, state.collected).length, read_with: 'list_context' } : null,
         selected_text: inDocument && text ? text : null,
         source_selection: sourceSelection,
         open_source: state.viewer ? { source_id: state.viewer.sourceId, page: state.viewer.page } : null,
+      }
+    },
+  },
+  {
+    name: 'list_context',
+    title: 'Read the gathered passages',
+    description:
+      'The passages the user gathered from the sources, in two groups. "free" are not cited by any block yet: they are the material a new block is built from, and add_block and link_sources use them by default. "used" are already cited somewhere in the document; they are listed so you can tell them apart, and citing one again is refused. For what the document already says use get_workspace; to read a source itself use read_source.',
+    inputSchema: { type: 'object', properties: {} },
+    annotations: { readOnlyHint: true },
+    execute: async (_input, ctx) => {
+      const collected = ctx.ws.getState().collected
+      const free: object[] = []
+      const used: object[] = []
+      for (const c of collected) {
+        const cited = ctx.ws.blocksCiting(c)
+        if (cited.length) used.push({ ...describeCitation(ctx, c), cited_by: cited.map((b) => ({ block_id: b.id, type: b.kind })) })
+        else free.push(describeCitation(ctx, c))
+      }
+      return {
+        ok: true,
+        summary: collected.length === 0 ? 'The context is empty: the user gathers passages by selecting text in a source and pressing “add to context”.' : `${free.length} free passage(s) to build with${used.length ? `, and ${used.length} the document already cites` : ''}.`,
+        free,
+        used,
       }
     },
   },
@@ -440,7 +474,7 @@ export const TOOLS: ToolDef[] = [
     title: 'Add a block to the document',
     description: `Adds a block and shows it at once. Either give "type" and "content" — ${Object.entries(CONTENT_SHAPES)
       .map(([t, s]) => `${t}: ${s}`)
-      .join('; ')} — or give raw "markdown" for one block. ${MARKDOWN_HELP}`,
+      .join('; ')} — or give raw "markdown" for one block. The passages the user gathered in the context and has not used yet are cited by default (use_collected: false to leave them). ${MARKDOWN_HELP}`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -448,8 +482,8 @@ export const TOOLS: ToolDef[] = [
         content: { type: 'object', description: 'Shape depends on type; see the tool description.' },
         markdown: { type: 'string', description: 'Raw markdown for exactly one block, instead of type + content.' },
         position: positionSchema,
-        citations: { type: 'array', items: citationSchema, description: 'Sources this block draws on, in the order the [n] marks refer to.' },
-        use_collected: { type: 'boolean', description: 'Also cite the passages the user gathered in the context and has not used yet (get_selection → gathered, the ones with free: true), before the ones listed here. Empties the basket.' },
+        citations: { type: 'array', items: citationSchema, description: 'Passages this block draws on, in the order the [n] marks refer to. A passage another block already cites is refused: each one backs a single block.' },
+        use_collected: { type: 'boolean', description: 'Defaults to true: the block cites the passages the user gathered in the context and has not used yet (get_selection → gathered, the ones with free: true), before any listed here, and the basket is emptied. Pass false when the block has nothing to do with them.' },
       },
     },
     execute: async (input, ctx) => {
@@ -462,6 +496,8 @@ export const TOOLS: ToolDef[] = [
       if (isFail(position)) return position
       const idx = insertIndex(ctx.ws.getState().blocks, position)
       if (typeof idx !== 'number') return fail(idx.error, 'Ids come from get_workspace.')
+      const notFree = checkFree(ctx, listed)
+      if (notFree) return notFree
       const collected = takeCollected(ctx, input)
       const blockCites = [...collected.citations, ...listed]
 
@@ -515,6 +551,8 @@ export const TOOLS: ToolDef[] = [
       if (input.citations !== undefined) {
         const parsed = await resolveCitations(ctx, input.citations)
         if (isFail(parsed)) return parsed
+        const notFree = checkFree(ctx, parsed, block.id)
+        if (notFree) return notFree
         citations = parsed
       }
       let nextRaw: string | undefined
@@ -640,13 +678,13 @@ export const TOOLS: ToolDef[] = [
   {
     name: 'link_sources',
     title: 'Link passages to a block',
-    description: 'Attaches passages from the sources to an existing block, keeping what it already cites: the ones listed and/or the ones the user gathered. Text blocks get a [^k] mark per passage at the end; elements get them in their cites attribute. Place marks yourself with update_block if you want them elsewhere.',
+    description: 'Attaches passages from the sources to an existing block, keeping what it already cites: the ones the user gathered and has not used yet (unless use_collected: false) and/or the ones listed. Text blocks get a [^k] mark per passage at the end; elements get them in their cites attribute. Place marks yourself with update_block if you want them elsewhere.',
     inputSchema: {
       type: 'object',
       properties: {
         block_id: { type: 'string', description: 'Defaults to the selected block.' },
         passages: { type: 'array', items: citationSchema },
-        use_collected: { type: 'boolean', description: 'Link the passages the user gathered in the context and has not used yet (get_selection → gathered, the ones with free: true). Empties the basket.' },
+        use_collected: { type: 'boolean', description: 'Defaults to true: links the passages the user gathered in the context and has not used yet (get_selection → gathered, the ones with free: true), and empties the basket. Pass false to link only the passages listed here.' },
       },
     },
     execute: async (input, ctx) => {
@@ -654,6 +692,8 @@ export const TOOLS: ToolDef[] = [
       if (isFail(block)) return block
       const listed = await resolveCitations(ctx, input.passages)
       if (isFail(listed)) return listed
+      const notFree = checkFree(ctx, listed, block.id)
+      if (notFree) return notFree
       const collected = takeCollected(ctx, input)
       const citations = [...collected.citations, ...listed]
       if (citations.length === 0) return fail(`Nothing to link.${skippedNote(collected.skipped)}`, 'List passages ({ source, page?, quote? }) or pass use_collected: true.')
