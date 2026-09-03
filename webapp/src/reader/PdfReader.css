@@ -1,0 +1,103 @@
+.reader {
+  position: relative;
+  height: 100%;
+  overflow: auto;
+}
+
+.reader-inner {
+  position: relative;
+  min-height: 100%;
+  padding: 24px 0 80px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.reader-halo-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: var(--z-threads);
+}
+
+@keyframes halo {
+  0% {
+    opacity: 0.95;
+    transform: scale(0.35);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+.halo {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: halo var(--dur-halo) ease-out both;
+}
+
+.pdf-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: none;
+}
+.sheet-slot {
+  display: flex;
+  justify-content: center;
+}
+.page-divider {
+  width: 100%;
+  height: var(--sheet-gap);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.page-divider-line {
+  flex: 1;
+  height: 1px;
+  background: var(--line-strong);
+}
+.page-divider-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-25);
+  white-space: nowrap;
+}
+
+.sheet {
+  position: relative;
+  z-index: var(--z-sheet);
+  background: var(--paper);
+  border-radius: var(--radius-sheet);
+  box-shadow: var(--shadow-sheet);
+  overflow: hidden;
+}
+.sheet-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.sheet-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* text wash — never intercepts the pointer */
+.wash {
+  position: absolute;
+  background: var(--wash);
+  box-shadow: 0 1.5px 0 var(--accent);
+  border-radius: 1px;
+}
+.wash--active {
+  background: var(--selection);
+  box-shadow: none;
+  animation: appear var(--dur-appear) var(--ease) both;
+}

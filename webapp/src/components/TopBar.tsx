@@ -1,23 +1,20 @@
 import { useSyncExternalStore } from 'react'
-import { useAugmentations } from '../augment/store'
 import { getStatus, subscribeStatus } from '../tools/webmcp'
+import { useSources } from '../workspace/sources'
+import { useWorkspace } from '../workspace/store'
+import { EditableText } from './EditableText'
 import './TopBar.css'
 
 interface TopBarProps {
-  title: string
-  pageCount: number
-  currentPage: number
-  /** Effective zoom, 1 = PDF points at 96dpi. */
-  scale: number
-  onZoomIn: () => void
-  onZoomOut: () => void
-  onFitWidth: () => void
-  onReadingWidth: () => void
-  onClose: () => void
+  showSources: boolean
+  showContext: boolean
+  onToggleSources: () => void
+  onToggleContext: () => void
 }
 
-export function TopBar({ title, pageCount, currentPage, scale, onZoomIn, onZoomOut, onFitWidth, onReadingWidth, onClose }: TopBarProps) {
-  const aug = useAugmentations()
+export function TopBar({ showSources, showContext, onToggleSources, onToggleContext }: TopBarProps) {
+  const ws = useWorkspace()
+  const { sources } = useSources()
   const webmcp = useSyncExternalStore(subscribeStatus, getStatus)
 
   return (
@@ -28,23 +25,11 @@ export function TopBar({ title, pageCount, currentPage, scale, onZoomIn, onZoomO
       </div>
 
       <div className="topbar-document">
-        <span className="topbar-title" title={title}>
-          {title}
+        <EditableText value={ws.title} placeholder="name this space" className="topbar-title" onChange={ws.setTitle} />
+        <span className="topbar-meta">
+          {sources.length} {sources.length === 1 ? 'source' : 'sources'} · {ws.blocks.length} {ws.blocks.length === 1 ? 'block' : 'blocks'}
         </span>
-        <span className="topbar-meta">{pageCount} pp</span>
       </div>
-
-      {aug.shownCount + aug.inTextCount > 0 && (
-        <span className="mono-label topbar-counter">
-          {aug.shownCount} shown · {aug.inTextCount} in text
-        </span>
-      )}
-      <button type="button" className={`control${aug.threadsOn ? '' : ' is-off'}`} onClick={aug.toggleThreads} aria-pressed={aug.threadsOn}>
-        threads
-      </button>
-      <button type="button" className="control" onClick={aug.tidy}>
-        tidy up
-      </button>
 
       <span
         className={`mono-label topbar-webmcp${webmcp.registered > 0 ? ' is-on' : ''}`}
@@ -53,27 +38,11 @@ export function TopBar({ title, pageCount, currentPage, scale, onZoomIn, onZoomO
         webmcp{webmcp.registered > 0 ? ` · ${webmcp.registered}` : ''}
       </span>
 
-      <span className="mono-label topbar-page">
-        p. {currentPage} / {pageCount}
-      </span>
-
-      <div className="topbar-zoom" role="group" aria-label="Zoom">
-        <button type="button" className="control" onClick={onZoomOut} aria-label="Zoom out">
-          −
-        </button>
-        <button type="button" className="control topbar-zoom-value" onClick={onReadingWidth} title="Reading width">
-          {Math.round(scale * 100)}%
-        </button>
-        <button type="button" className="control" onClick={onZoomIn} aria-label="Zoom in">
-          +
-        </button>
-        <button type="button" className="control" onClick={onFitWidth}>
-          fit
-        </button>
-      </div>
-
-      <button type="button" className="control" onClick={onClose}>
-        close
+      <button type="button" className={`control${showSources ? '' : ' is-off'}`} onClick={onToggleSources} aria-pressed={showSources}>
+        sources
+      </button>
+      <button type="button" className={`control${showContext ? '' : ' is-off'}`} onClick={onToggleContext} aria-pressed={showContext} disabled={ws.viewer !== null}>
+        context
       </button>
     </header>
   )

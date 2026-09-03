@@ -5,8 +5,8 @@ export type ZoomMode = { kind: 'reading' } | { kind: 'fit' } | { kind: 'manual';
 export const READING_WIDTH = 760
 /** Room kept on each side of the sheet when fitting to the viewport. */
 export const FIT_MARGIN = 48
-/** Space reserved on both sides of the document column for future cards. */
-export const WORKSPACE_GUTTER = 360
+/** Breathing room on both sides of the sheets. */
+export const WORKSPACE_GUTTER = 24
 
 export const MIN_SCALE = 0.4
 export const MAX_SCALE = 4
