@@ -1,20 +1,17 @@
+/* The whole column is the sheet: paper edge to edge, whatever the scroll position or window size. */
 .document {
   min-height: 0;
   overflow-y: auto;
-  background: var(--canvas);
-  background-image: radial-gradient(var(--grid-dot) 1px, transparent 1px);
-  background-size: var(--grid-size) var(--grid-size);
-  padding: 0 24px 120px;
+  background: var(--paper);
+  padding: 0;
 }
 
 .document-page {
   max-width: 1000px;
   margin: 0 auto;
   min-height: 100%;
-  background: var(--paper);
-  padding: 44px 84px 96px;
-  box-shadow: var(--shadow-sheet);
-  border-radius: 0 0 var(--radius-sheet) var(--radius-sheet);
+  box-sizing: border-box;
+  padding: 44px 84px 120px;
 }
 
 .document-empty {
