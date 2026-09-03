@@ -153,7 +153,63 @@
   animation: appear 160ms var(--ease) both;
 }
 
-/* citation marks */
+/* the strip between blocks: an insert point on hover */
+.block-gap {
+  position: relative;
+  height: 14px;
+  margin: -14px -8px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 120ms var(--ease);
+}
+.block-gap:hover,
+.block-gap.is-open {
+  opacity: 1;
+}
+.block-gap-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--border-selected);
+}
+.block-gap-add,
+.block-gap-close {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border-control);
+  border-radius: 50%;
+  background: var(--paper);
+  color: var(--ink-45);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.block-gap-add:hover,
+.block-gap-close:hover {
+  color: var(--ink);
+  border-color: var(--border-hover);
+}
+.block-gap-menu {
+  position: relative;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 0 6px;
+  background: var(--paper);
+  animation: appear 160ms var(--ease) both;
+}
+.block-gap.is-open {
+  height: 34px;
+  margin-bottom: 4px;
+}
+
+/* citation marks
 .cite {
   border: none;
   background: none;
@@ -177,3 +233,7 @@
   color: var(--paper);
 }
 
+
+.block--draft {
+  border-color: var(--border-selected);
+}

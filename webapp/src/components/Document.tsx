@@ -4,8 +4,9 @@ import { blockToMarkdown } from '../workspace/markdown/serialize'
 import type { BlockData, ParsedBlock } from '../workspace/markdown/types'
 import { useSources } from '../workspace/sources'
 import { useWorkspace } from '../workspace/store'
-import type { Citation } from '../workspace/types'
+import type { Citation, Position } from '../workspace/types'
 import { BlockBody } from './blocks/BlockBody'
+import { EditableText } from './EditableText'
 import { CollectTray } from './CollectTray'
 import './Document.css'
 import './blocks/blocks.css'
@@ -20,6 +21,8 @@ export function Document() {
   const [now, setNow] = useState(() => Date.now())
   const [menuOpen, setMenuOpen] = useState(false)
   const [autoEditId, setAutoEditId] = useState<string | null>(null)
+  // Which gap between blocks has its insert menu open: the id of the block above, or 'start'.
+  const [gapOpen, setGapOpen] = useState<string | null>(null)
   const pageRef = useRef<HTMLDivElement>(null)
   const flashId = ws.focusKey && now - ws.focusKey < FLASH_MS ? ws.selectedBlockId : null
 
@@ -120,10 +123,72 @@ export function Document() {
     )
   }
 
-  const addManual = (data: BlockData) => {
-    const [block] = ws.insertBlock(blockToMarkdown(data), 'end')
-    if (block) setAutoEditId(block.id)
+  // A heading or paragraph starts as a draft editor (an empty block cannot exist in markdown); it joins
+  // the document once some text is committed. Elements can be empty, so they go in at once.
+  const [draft, setDraft] = useState<{ kind: 'heading' | 'paragraph'; position: Position } | null>(null)
+  const addManual = (data: BlockData, position: Position = 'end') => {
     setMenuOpen(false)
+    setGapOpen(null)
+    if (data.kind === 'heading' || data.kind === 'paragraph') {
+      setDraft({ kind: data.kind, position })
+      return
+    }
+    const [block] = ws.insertBlock(blockToMarkdown(data), position)
+    if (block) setAutoEditId(block.id)
+  }
+  const draftEditor = draft && (
+    <section key="draft" className={`block block--${draft.kind} block--draft`}>
+      <EditableText
+        as="div"
+        value=""
+        placeholder={draft.kind === 'heading' ? 'section title' : 'write…'}
+        className={draft.kind === 'heading' ? 'heading heading--2' : 'paragraph'}
+        multiline={draft.kind === 'paragraph'}
+        autoEdit
+        onChange={(text) => {
+          if (!text.trim()) return
+          const raw = draft.kind === 'heading' && !/^#{1,3}\s/.test(text) ? `## ${text.trim()}` : text
+          const [block] = ws.insertBlock(raw, draft.position)
+          if (block) ws.select(block.id)
+        }}
+        onDone={() => setDraft(null)}
+      />
+    </section>
+  )
+  const draftAt = (position: Position) => (draft && JSON.stringify(draft.position) === JSON.stringify(position) ? [draftEditor] : [])
+
+  const KINDS: { label: string; data: BlockData }[] = [
+    { label: 'heading', data: { kind: 'heading', text: '', level: 2 } },
+    { label: 'paragraph', data: { kind: 'paragraph', markdown: '' } },
+    { label: 'callout', data: { kind: 'callout', title: '', body: '', tone: 'idea', cites: [] } },
+  ]
+
+  /** The thin strip between two blocks: hover shows +, click offers the kinds, the block lands right there. */
+  const gap = (afterId: string | null) => {
+    const key = afterId ?? 'start'
+    const position: Position = afterId ? { after: afterId } : 'start'
+    const open = gapOpen === key
+    return (
+      <div key={`gap-${key}`} className={`block-gap${open ? ' is-open' : ''}`} onClick={(e) => e.stopPropagation()}>
+        <span className="block-gap-line" />
+        {open ? (
+          <div className="block-gap-menu">
+            {KINDS.map((k) => (
+              <button key={k.label} type="button" className="control" onClick={() => addManual(k.data, position)}>
+                {k.label}
+              </button>
+            ))}
+            <button type="button" className="block-gap-close" title="cancel" onClick={() => setGapOpen(null)}>
+              ×
+            </button>
+          </div>
+        ) : (
+          <button type="button" className="block-gap-add" title="insert a block here" onClick={() => setGapOpen(key)}>
+            +
+          </button>
+        )}
+      </div>
+    )
   }
 
   return (
@@ -137,12 +202,12 @@ export function Document() {
             <div className="document-empty-body">Add sources on the left and ask your agent to explain them — or gather passages yourself and turn them into a block.</div>
           </div>
         ) : (
-          ws.blocks.map((block, index) => {
+          ws.blocks.flatMap((block, index) => {
             const meta = ws.blockMeta[block.id]
             const justAdded = meta?.by === 'agent' && now - meta.createdAt < JUST_ADDED_MS
             const label = blockLabel(block)
             const classes = ['block', `block--${block.kind}`, ws.selectedBlockId === block.id ? 'is-selected' : '', flashId === block.id ? 'is-flashing' : '', justAdded ? 'is-new' : ''].filter(Boolean).join(' ')
-            return (
+            const section = (
               <section key={block.id} data-block-id={block.id} className={classes} onPointerDownCapture={() => ws.select(block.id)}>
                 {label && (
                   <div className="block-label">
@@ -171,9 +236,11 @@ export function Document() {
                 </div>
               </section>
             )
+            return [...(index === 0 ? [gap(null), ...draftAt('start')] : []), section, gap(block.id), ...draftAt({ after: block.id })]
           })
         )}
 
+        {!ws.rawView && draftAt('end')}
         {!ws.rawView && (
           <>
             <CollectTray />

@@ -62,7 +62,7 @@ const CONTENT_SHAPES: Record<BlockData['kind'], string> = {
   heading: '{ text, level?: 1|2|3 (default 2) }',
   paragraph: '{ text } — markdown; write [1], [2]… in the text to mark where each citation applies (they become footnotes)',
   callout: '{ title?, body (markdown), tone?: "idea"|"example"|"warning"|"why" (default "idea") }',
-  diagram: '{ title?, nodes: [{ label, citation? }], edges?: [{ from, to, label? }] } — from/to by 1-based node position or label; without edges the nodes form a chain',
+  diagram: '{ title?, nodes: [{ label, citation? }], edges?: [{ from, to, label? }] } — any graph: from/to by 1-based node position or label, branches and cycles allowed, laid out automatically; without edges the nodes form a chain',
   comparison: '{ title?, columns: [string], rows: [{ label, cells: [string] }] }',
   flashcards: '{ cards: [{ question, answer, citation? }] }',
   quiz: '{ questions: [{ prompt, options: [string], answer: 1-based position or the option text, explanation? }] }',

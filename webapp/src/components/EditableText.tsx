@@ -13,10 +13,12 @@ interface EditableTextProps {
   render?: (value: string) => React.ReactNode
   /** Display element; use `div` when the rendered value holds block-level HTML. */
   as?: 'span' | 'div'
+  /** Called when editing ends, saved or not (after onChange). */
+  onDone?: () => void
 }
 
 /** Click-to-edit text. Blur saves; Enter saves single-line fields. */
-export function EditableText({ value, placeholder, onChange, multiline = false, className = '', autoEdit = false, render, as: Tag = 'span' }: EditableTextProps) {
+export function EditableText({ value, placeholder, onChange, multiline = false, className = '', autoEdit = false, render, as: Tag = 'span', onDone }: EditableTextProps) {
   const [editing, setEditing] = useState(autoEdit)
   const [draft, setDraft] = useState(value)
   const ref = useRef<HTMLTextAreaElement>(null)
@@ -35,12 +37,14 @@ export function EditableText({ value, placeholder, onChange, multiline = false, 
     setEditing(false)
     const next = draft.trim()
     if (next !== value) onChange(next)
+    onDone?.()
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Escape') {
       setDraft(value)
       setEditing(false)
+      onDone?.()
     } else if (event.key === 'Enter' && (!multiline || event.metaKey || event.ctrlKey)) {
       event.preventDefault()
       commit()
