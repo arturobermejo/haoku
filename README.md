@@ -1,9 +1,10 @@
 # haoku
 
-A knowledge workspace for reading with an agent. You bring the sources; the agent writes the
-document with you, and every claim in it points back at the passage it came from.
+A knowledge workspace for studying with an agent. You bring the sources; the agent writes the
+document with you and turns it into questions to drill, and every claim points back at the passage
+it came from.
 
-Three columns:
+**Study** is three columns:
 
 - **Sources** — PDFs, text files, images, or text you paste (with the URL it came from). Everything
   stays in the browser, in IndexedDB. No server, no upload.
@@ -13,7 +14,8 @@ Three columns:
 - **Context** — where the selected block comes from: the passages it cites, and the ones you have
   gathered from the sources but not used yet.
 
-A **practice** tab drills you on multiple-choice questions tied to those same passages.
+**Practice** is the other half: multiple-choice questions the agent writes from those same passages,
+asked weakest first, with your progress kept alongside the document.
 
 Citations are standard Markdown footnotes. `[^3]` in the text, and at the end of the document:
 
