@@ -1,5 +1,6 @@
 import type { BlockMeta, Citation, Highlight, WorkspaceDoc } from '../types'
 import { parseDocument } from './parse'
+import { retireDoc } from './retire'
 import { footnoteLine, sameCitation, withCiteMarks } from './citations'
 import { blockToMarkdown } from './serialize'
 import type { BlockData } from './types'
@@ -24,12 +25,11 @@ export interface LegacyDoc {
   blocks: (LegacyBlock & { by?: 'user' | 'agent'; createdAt?: number })[]
   highlights?: Highlight[]
   /** Keyed by question id in the old model. */
-  quizAnswers?: Record<string, number>
 }
 
 export const isLegacyDoc = (doc: unknown): doc is LegacyDoc => !!doc && typeof doc === 'object' && Array.isArray((doc as LegacyDoc).blocks) && !('markdown' in (doc as object))
 
-/** Converts a legacy block document into markdown with footnotes. Quiz progress is not carried over. */
+/** Converts a legacy block document into markdown with footnotes. Answers given back then are not carried over. */
 export function legacyToMarkdown(doc: LegacyDoc, sourceName: (id: string) => string = (id) => id): string {
   const footnotes = new Map<string, Citation>()
   const keyFor = (c: Citation): string => {
@@ -78,10 +78,10 @@ export function legacyToMarkdown(doc: LegacyDoc, sourceName: (id: string) => str
         raw = withCiteMarks('comparison', blockToMarkdown({ kind: 'comparison', title: c.title, columns: c.columns, rows: c.rows }), blockKeys)
         break
       case 'flashcards':
-        raw = blockToMarkdown({ kind: 'flashcards', cards: c.cards.map((k) => ({ question: k.question, answer: k.answer, ...(k.citation ? { cite: keyFor(k.citation) } : {}) })), cites: blockKeys })
+        raw = retiredElement('flashcards', blockKeys, { cards: c.cards.map((k) => ({ question: k.question, answer: k.answer, ...(k.citation ? { cite: keyFor(k.citation) } : {}) })) })
         break
       case 'quiz':
-        raw = blockToMarkdown({ kind: 'quiz', questions: c.questions.map((q) => ({ prompt: q.prompt, options: q.options, answer: q.answer, ...(q.explanation ? { explanation: q.explanation } : {}) })), cites: blockKeys })
+        raw = retiredElement('quiz', blockKeys, { questions: c.questions.map((q) => ({ prompt: q.prompt, options: q.options, answer: q.answer, ...(q.explanation ? { explanation: q.explanation } : {}) })) })
         break
       case 'image':
         raw = withCiteMarks('image', blockToMarkdown({ kind: 'image', sourceId: c.sourceId, caption: c.caption }), blockKeys)
@@ -93,21 +93,20 @@ export function legacyToMarkdown(doc: LegacyDoc, sourceName: (id: string) => str
   return [...parts, ...(defs.length ? [defs.join('\n')] : [])].join('\n\n') + (parts.length ? '\n' : '')
 }
 
-/** A stored legacy document as today's WorkspaceDoc: same block ids, answers re-keyed, metadata kept. */
+/**
+ * The flashcards and quizzes of the old block document, written as the elements the earlier build used,
+ * so `retireDoc` moves them to the practice bank in one place.
+ */
+const retiredElement = (tag: 'flashcards' | 'quiz', cites: string[], body: unknown) => `<space-${tag}${cites.length ? ` cites="${cites.join(' ')}"` : ''}>\n${JSON.stringify(body)}\n</space-${tag}>`
+
+/** A stored legacy document as today's WorkspaceDoc: same block ids, metadata kept, questions moved to practice. */
 export function migrateLegacy(doc: LegacyDoc, sourceName: (id: string) => string = (id) => id): WorkspaceDoc {
   const markdown = legacyToMarkdown(doc, sourceName)
   const blockIds = doc.blocks.map((b) => b.id)
   const parsed = parseDocument(markdown, { ids: blockIds })
   const blockMeta: Record<string, BlockMeta> = {}
-  const quizAnswers: Record<string, number> = {}
   doc.blocks.forEach((b) => {
     blockMeta[b.id] = { by: b.by ?? 'user', createdAt: b.createdAt ?? Date.now() }
-    if (b.content.type === 'quiz') {
-      b.content.questions.forEach((q, i) => {
-        const picked = doc.quizAnswers?.[q.id]
-        if (picked !== undefined) quizAnswers[`${b.id}:${i}`] = picked
-      })
-    }
   })
-  return { version: 2, title: doc.title, markdown, highlights: doc.highlights ?? [], quizAnswers, blockIds: parsed.blocks.map((b) => b.id), blockMeta }
+  return retireDoc({ version: 2, title: doc.title, markdown, highlights: doc.highlights ?? [], blockIds: parsed.blocks.map((b) => b.id), blockMeta })
 }

@@ -313,8 +313,6 @@ h4.print-heading {
   color: #2a5f8f;
 }
 .print-doc space-callout,
-.print-doc space-diagram,
-.print-doc space-flashcards,
-.print-doc space-quiz {
+.print-doc space-diagram {
   font-size: 10.5pt;
 }

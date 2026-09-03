@@ -51,29 +51,15 @@ export function Document() {
       const payload = (e as CustomEvent<{ data: Record<string, unknown> }>).detail.data
       ws.updateBlockData(id!, { ...block.data, ...payload } as BlockData)
     }
-    const onAnswer = (e: Event) => {
-      const id = blockOf(e)
-      const { question, option } = (e as CustomEvent<{ question: number; option: number }>).detail
-      if (id) ws.answerQuiz(id, question, option)
-    }
-    const onReveal = (e: Event) => {
-      const id = blockOf(e)
-      const { card, revealed } = (e as CustomEvent<{ card: number; revealed: boolean }>).detail
-      if (id) ws.reveal(id, card, revealed)
-    }
     const onCite = (e: Event) => {
       const key = (e as CustomEvent<{ key: string }>).detail.key
       const citation = ws.getState().footnotes.get(key)
       if (citation) ws.openViewer({ sourceId: citation.sourceId, page: citation.page, citation })
     }
     page.addEventListener('space-change', onChange)
-    page.addEventListener('space-answer', onAnswer)
-    page.addEventListener('space-reveal', onReveal)
     page.addEventListener('space-cite', onCite)
     return () => {
       page.removeEventListener('space-change', onChange)
-      page.removeEventListener('space-answer', onAnswer)
-      page.removeEventListener('space-reveal', onReveal)
       page.removeEventListener('space-cite', onCite)
     }
   }, [ws])
@@ -82,7 +68,7 @@ export function Document() {
   const onClickCapture = (e: ReactMouseEvent) => {
     const target = e.target as HTMLElement
     const mark = target.closest<HTMLElement>('.cite[data-key]')
-    if (mark && !target.closest('space-callout, space-diagram, space-flashcards, space-quiz')) {
+    if (mark && !target.closest('space-callout, space-diagram')) {
       const citation = ws.footnotes.get(mark.dataset.key ?? '')
       e.preventDefault()
       e.stopPropagation()
@@ -95,6 +81,12 @@ export function Document() {
       e.stopPropagation()
       ws.openViewer({ sourceId: img.dataset.sourceId! })
     }
+  }
+
+  // A click outside every block deselects; the strips, the tray and the add row act on the selection, so they don't.
+  const clearSelection = (e: ReactMouseEvent) => {
+    if ((e.target as HTMLElement).closest('[data-block-id], .block--draft, .block-gap, .tray, .document-add, .raw-view')) return
+    ws.select(null)
   }
 
   const sourceLine = (block: ParsedBlock) => {
@@ -192,8 +184,8 @@ export function Document() {
   }
 
   return (
-    <main className="document scroll" onClick={() => ws.select(null)}>
-      <div ref={pageRef} className="document-page" onClick={(e) => e.stopPropagation()} onClickCapture={onClickCapture}>
+    <main className="document scroll" onClick={clearSelection}>
+      <div ref={pageRef} className="document-page" onClickCapture={onClickCapture}>
         {ws.rawView ? (
           <RawEditor />
         ) : ws.blocks.length === 0 ? (

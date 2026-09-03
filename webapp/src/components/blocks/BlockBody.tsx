@@ -10,9 +10,7 @@ export function BlockBody({ block, autoEdit = false }: { block: ParsedBlock; aut
       return <ImageBlock block={block} data={d} />
     case 'callout':
     case 'diagram':
-    case 'flashcards':
-    case 'quiz':
-      return <ElementBlock block={block} data={d} />
+      return <ElementBlock data={d} />
     default:
       return <MarkdownBlock block={block} autoEdit={autoEdit} />
   }

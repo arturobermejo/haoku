@@ -69,10 +69,6 @@
   text-transform: uppercase;
   color: var(--ink-45);
 }
-.block--quiz .block-label-text,
-.block--flashcards .block-label-text {
-  color: var(--kind-synthesis);
-}
 .block-label-rule {
   flex: 1;
   height: 1px;

@@ -6,8 +6,8 @@ import { useWorkspace } from '../workspace/store'
 import './Practice.css'
 
 /**
- * The practice view: one multiple-choice question at a time, drawn from the practice bank and from the
- * quizzes in the space. Wrong answers come back sooner; progress persists with the space.
+ * The practice view: one multiple-choice question at a time from the practice bank.
+ * Wrong answers come back sooner; progress persists with the space.
  */
 export function Practice() {
   const ws = useWorkspace()
@@ -17,7 +17,7 @@ export function Practice() {
   const [picked, setPicked] = useState<number | null>(null)
   const [tally, setTally] = useState({ right: 0, wrong: 0 })
 
-  const deck = useMemo(() => buildDeck(ws.blocks, ws.footnotes, ws.practice), [ws.blocks, ws.footnotes, ws.practice])
+  const deck = useMemo(() => buildDeck(ws.practice), [ws.practice])
   // The order is fixed for a round; the progress it was built from only matters at the start.
   const order = useMemo(() => orderForPractice(deck, ws.getState().practiceProgress), [deck, round]) // eslint-disable-line react-hooks/exhaustive-deps
   const summary = progressSummary(deck, ws.practiceProgress)
@@ -82,7 +82,7 @@ export function Practice() {
         {deck.length === 0 ? (
           <div className="practice-empty">
             <div className="document-empty-title">Nothing to practise yet.</div>
-            <div className="document-empty-body">Quiz questions in the space show up here automatically. Ask your agent for more: it can add questions to the practice bank with add_practice, each one tied to a passage of the sources.</div>
+            <div className="document-empty-body">Ask your agent for questions: it can add them with add_practice, each one tied to a passage of the sources.</div>
           </div>
         ) : done ? (
           <div className="practice-card practice-done">
@@ -105,7 +105,6 @@ export function Practice() {
               <span className="practice-progress-text">
                 {index + 1} / {order.length}
                 {current.topic ? ` · ${current.topic}` : ''}
-                {current.origin === 'space' ? ' · from the space' : ''}
               </span>
             </div>
 

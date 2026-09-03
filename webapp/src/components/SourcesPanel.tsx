@@ -71,7 +71,7 @@ export function SourcesPanel() {
     void addFiles(Array.from(event.dataTransfer.files))
   }
 
-  const covered = sections(ws.blocks, ws.quizAnswers)
+  const covered = sections(ws.blocks)
 
   return (
     <aside
@@ -132,7 +132,7 @@ export function SourcesPanel() {
           <div className="covered-list">
             {covered.map((s) => (
               <button key={s.headingId} type="button" className={`covered-row covered-row--${s.status}`} onClick={() => ws.focusBlock(s.headingId)} style={{ paddingLeft: 6 + (s.level - 1) * 14 }}>
-                <span className="covered-mark">{s.status === 'done' ? '✓' : s.status === 'shaky' ? '△' : '?'}</span>
+                <span className="covered-mark">{s.status === 'done' ? '✓' : '?'}</span>
                 <span className="covered-title">{s.title || 'untitled section'}</span>
               </button>
             ))}

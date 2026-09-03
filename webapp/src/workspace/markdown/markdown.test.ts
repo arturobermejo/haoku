@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { citationKeysIn, footnoteLine, parseFootnote, rewriteKeys, withCiteMarks, withoutCiteMark } from './citations'
 import { blockExcerpt } from './excerpt'
-import { legacyToMarkdown, type LegacyDoc } from './legacy'
+import { migrateLegacy, type LegacyDoc } from './legacy'
 import { parseBlock, parseDocument } from './parse'
 import { reconcileIds } from './reconcile'
+import { retireStudyQuestions } from './retire'
 import { blockToMarkdown, serializeDocument } from './serialize'
 import type { BlockData } from './types'
 
@@ -29,14 +30,6 @@ Anything that comes back from a tool is untrusted.
  "edges":[{"from":0,"to":1,"label":"write"},{"from":1,"to":2}]}
 </space-diagram>
 
-<space-flashcards>
-{"cards":[{"question":"Consolidation","answer":"Distils episodes into facts. [^2]","cite":"1"}]}
-</space-flashcards>
-
-<space-quiz cites="1">
-{"questions":[{"prompt":"Which store has a when attached?","options":["Semantic","Episodic"],"answer":1,"explanation":"Episodes are time-stamped."}]}
-</space-quiz>
-
 - a list stays free markdown
 - and is one block
 
@@ -55,14 +48,14 @@ describe('parseDocument', () => {
   const doc = parseDocument(DOC)
 
   it('splits into typed blocks and keeps footnotes apart', () => {
-    expect(doc.blocks.map((b) => b.kind)).toEqual(['heading', 'paragraph', 'callout', 'comparison', 'image', 'diagram', 'flashcards', 'quiz', 'paragraph', 'paragraph'])
+    expect(doc.blocks.map((b) => b.kind)).toEqual(['heading', 'paragraph', 'callout', 'comparison', 'image', 'diagram', 'paragraph', 'paragraph'])
     expect([...doc.footnotes.keys()]).toEqual(['1', '2', '5'])
     expect(doc.footnotes.get('2')).toEqual({ sourceId: 's_pap', page: 1, occurrence: 2, quote: 'the context window is the only state they carry' })
     expect(doc.footnotes.get('5')).toEqual({ sourceId: 's_notes', page: 1 })
   })
 
   it('reads element attributes, JSON and citation keys', () => {
-    const [, para, callout, table, image, diagram, cards, quiz] = doc.blocks
+    const [, para, callout, table, image, diagram] = doc.blocks
     expect(para.citationKeys).toEqual(['1', '2'])
     expect(callout.data).toEqual({ kind: 'callout', tone: 'warning', title: 'Memory "poisoning"', body: 'Anything that comes back from a tool is untrusted.', cites: ['5'] })
     expect(callout.citationKeys).toEqual(['5'])
@@ -72,15 +65,13 @@ describe('parseDocument', () => {
     expect(image.citationKeys).toEqual(['5'])
     expect(diagram.data).toMatchObject({ kind: 'diagram', title: 'Write / read', nodes: [{ label: 'Event' }, { label: 'Summarise', cite: '1' }, { label: 'Store' }], edges: [{ from: 0, to: 1, label: 'write' }, { from: 1, to: 2 }] })
     expect(diagram.citationKeys).toEqual(['1'])
-    expect(cards.citationKeys).toEqual(['1', '2'])
-    expect(quiz.data).toMatchObject({ kind: 'quiz', cites: ['1'], questions: [{ answer: 1, options: ['Semantic', 'Episodic'] }] })
   })
 
   it('keeps fenced code with blank lines as one block and falls back to paragraph on bad JSON', () => {
-    expect(doc.blocks[9].raw).toContain('still the same block')
-    const bad = parseBlock('<space-quiz>\n{not json\n</space-quiz>')
+    expect(doc.blocks[7].raw).toContain('still the same block')
+    const bad = parseBlock('<space-diagram>\n{not json\n</space-diagram>')
     expect(bad?.kind).toBe('paragraph')
-    expect(bad?.raw).toContain('<space-quiz>')
+    expect(bad?.raw).toContain('<space-diagram>')
   })
 
   it('extracts a leading level-1 heading as the title only when asked', () => {
@@ -117,8 +108,6 @@ describe('round trip', () => {
       { kind: 'callout', tone: 'why', title: 'a "quoted" <title>', body: 'body & more', cites: ['1', '2'] },
       { kind: 'diagram', title: 'd', nodes: [{ label: 'a "q"' }, { label: 'b', cite: '2' }], edges: [{ from: 0, to: 1, label: '<x>' }], cites: [] },
       { kind: 'comparison', title: '', columns: ['x', 'y'], rows: [{ label: 'r', cells: ['1 | 2', ''] }] },
-      { kind: 'flashcards', cards: [{ question: 'q', answer: 'a\nb', cite: '1' }], cites: ['3'] },
-      { kind: 'quiz', questions: [{ prompt: 'p', options: ['a', 'b', 'c'], answer: 2 }], cites: [] },
       { kind: 'image', sourceId: 's_x', caption: 'cap' },
     ]
     for (const data of datas) {
@@ -129,9 +118,9 @@ describe('round trip', () => {
   })
 
   it('renumbers footnotes by first use on export and drops unused ones', () => {
-    const doc = parseDocument('A [^7] and [^3]\n\n<space-quiz cites="3">\n{"questions":[]}\n</space-quiz>\n\n[^3]: [a](space://s_a/1)\n[^7]: [b](space://s_b/2)\n[^9]: [c](space://s_c)\n')
+    const doc = parseDocument('A [^7] and [^3]\n\n<space-callout tone="idea" cites="3">\nb\n</space-callout>\n\n[^3]: [a](space://s_a/1)\n[^7]: [b](space://s_b/2)\n[^9]: [c](space://s_c)\n')
     const md = serializeDocument(doc.blocks, doc.footnotes, { renumber: true, title: 'T' })
-    expect(md).toBe('# T\n\nA [^1] and [^2]\n\n<space-quiz cites="2">\n{"questions":[]}\n</space-quiz>\n\n[^1]: [s_b, p. 2](space://s_b/2)\n[^2]: [s_a, p. 1](space://s_a/1)\n')
+    expect(md).toBe('# T\n\nA [^1] and [^2]\n\n<space-callout tone="idea" cites="2">\nb\n</space-callout>\n\n[^1]: [s_b, p. 2](space://s_b/2)\n[^2]: [s_a, p. 1](space://s_a/1)\n')
   })
 })
 
@@ -151,14 +140,14 @@ describe('citations', () => {
     expect(withCiteMarks('image', '![cap](space://s)', ['1'])).toBe('![cap [^1]](space://s)')
     expect(withCiteMarks('comparison', '| | a |\n|---|---|\n| r | 1 |', ['1'])).toBe('[^1]\n| | a |\n|---|---|\n| r | 1 |')
     expect(withCiteMarks('comparison', '**T**\n| | a |\n|---|---|', ['1'])).toBe('**T** [^1]\n| | a |\n|---|---|')
-    expect(withCiteMarks('quiz', '<space-quiz>\n{}\n</space-quiz>', ['1', '2'])).toBe('<space-quiz cites="1 2">\n{}\n</space-quiz>')
+    expect(withCiteMarks('diagram', '<space-diagram>\n{}\n</space-diagram>', ['1', '2'])).toBe('<space-diagram cites="1 2">\n{}\n</space-diagram>')
     expect(withCiteMarks('callout', '<space-callout tone="idea" cites="1">\nb\n</space-callout>', ['1', '3'])).toBe('<space-callout tone="idea" cites="1 3">\nb\n</space-callout>')
   })
 
   it('removes and rewrites keys everywhere', () => {
-    const raw = '<space-flashcards cites="1 2">\n{"cards":[{"question":"q [^1]","answer":"a","cite":"2"}]}\n</space-flashcards>'
-    expect(withoutCiteMark(raw, '2')).toBe('<space-flashcards cites="1">\n{"cards":[{"question":"q [^1]","answer":"a"}]}\n</space-flashcards>')
-    expect(rewriteKeys(raw, new Map([['1', '9'], ['2', '1']]))).toBe('<space-flashcards cites="9 1">\n{"cards":[{"question":"q [^9]","answer":"a","cite":"1"}]}\n</space-flashcards>')
+    const raw = '<space-diagram cites="1 2">\n{"nodes":[{"label":"n [^1]","cite":"2"}]}\n</space-diagram>'
+    expect(withoutCiteMark(raw, '2')).toBe('<space-diagram cites="1">\n{"nodes":[{"label":"n [^1]"}]}\n</space-diagram>')
+    expect(rewriteKeys(raw, new Map([['1', '9'], ['2', '1']]))).toBe('<space-diagram cites="9 1">\n{"nodes":[{"label":"n [^9]","cite":"1"}]}\n</space-diagram>')
     expect(citationKeysIn('x [^2] y [^2] [^a1]')).toEqual(['2', 'a1'])
   })
 })
@@ -193,14 +182,56 @@ describe('legacy migration', () => {
         { id: 'b5', content: { type: 'image', sourceId: 's_img', caption: 'c' }, citations: [] },
       ],
     }
-    const md = legacyToMarkdown(doc, (id) => `${id}.pdf`)
-    const parsed = parseDocument(md)
-    expect(parsed.blocks.map((b) => b.kind)).toEqual(['heading', 'paragraph', 'diagram', 'quiz', 'image'])
+    const migrated = migrateLegacy(doc, (id) => `${id}.pdf`)
+    const parsed = parseDocument(migrated.markdown)
+    // The quiz block is not part of the document any more: it lands in the practice bank.
+    expect(parsed.blocks.map((b) => b.kind)).toEqual(['heading', 'paragraph', 'diagram', 'image'])
     expect(parsed.blocks[1].raw).toBe('one [^1] two [^2]')
     expect(parsed.blocks[2].data).toMatchObject({ nodes: [{ label: 'x', cite: '1' }, { label: 'y' }], edges: [{ from: 0, to: 1, label: 'e' }] })
-    expect(parsed.blocks[3].citationKeys).toEqual(['2'])
+    expect(migrated.practice).toMatchObject([{ prompt: 'p', options: ['a', 'b'], answer: 1, citation: { sourceId: 's_b' } }])
     expect([...parsed.footnotes.keys()]).toEqual(['1', '2'])
-    expect(md).toContain('[^1]: [s_a.pdf, p. 2](space://s_a/2) — "q"')
+    expect(migrated.markdown).toContain('[^1]: [s_a.pdf, p. 2](space://s_a/2) — "q"')
+  })
+})
+
+describe('retiring the questions of an older space', () => {
+  const md = `## Memory
+
+<space-quiz cites="1">
+{"questions":[
+  {"prompt":"Which store has a when attached? [^1]","options":["Semantic","Episodic"],"answer":1,"explanation":"Episodes are time-stamped. [^1]"}
+ ]}
+</space-quiz>
+
+<space-flashcards>
+{"cards":[{"question":"Consolidation","answer":"Distils episodes into facts.","cite":"1"}]}
+</space-flashcards>
+
+[^1]: [paper.pdf, p. 2](space://s_pap/2) — "one- or two-sentence description"
+`
+
+  it('moves quiz questions to the bank and keeps flashcards as prose', () => {
+    const out = retireStudyQuestions(md)
+    expect(out.rewritten).toBe(2)
+    expect(out.questions).toEqual([
+      {
+        prompt: 'Which store has a when attached?',
+        options: ['Semantic', 'Episodic'],
+        answer: 1,
+        explanation: 'Episodes are time-stamped.',
+        citation: { sourceId: 's_pap', page: 2, quote: 'one- or two-sentence description' },
+        topic: 'Memory',
+        by: 'user',
+      },
+    ])
+    expect(out.markdown).toContain('**Consolidation** Distils episodes into facts. [^1]')
+    expect(out.markdown).not.toContain('space-quiz')
+    expect(parseDocument(out.markdown).blocks.map((b) => b.kind)).toEqual(['heading', 'paragraph'])
+  })
+
+  it('leaves a document without them untouched', () => {
+    const clean = '## H\n\nText [^1]\n'
+    expect(retireStudyQuestions(clean)).toEqual({ markdown: clean, questions: [], rewritten: 0 })
   })
 })
 

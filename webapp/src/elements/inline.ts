@@ -35,7 +35,7 @@ md.use({
 const PURIFY = {
   CUSTOM_ELEMENT_HANDLING: {
     tagNameCheck: /^space-[a-z]+$/,
-    attributeNameCheck: /^(tone|title|cites|editable|answers|revealed|print)$/,
+    attributeNameCheck: /^(tone|title|cites|editable|print)$/,
     allowCustomizedBuiltInElements: false,
   },
   ADD_ATTR: ['data-key', 'data-source-id', 'role', 'tabindex'],

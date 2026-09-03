@@ -17,7 +17,7 @@ interface EditableTextProps {
   onDone?: () => void
 }
 
-/** Click-to-edit text. Blur saves; Enter saves single-line fields. */
+/** Double-click-to-edit text: a single click only selects the block. Blur saves; Enter saves single-line fields. */
 export function EditableText({ value, placeholder, onChange, multiline = false, className = '', autoEdit = false, render, as: Tag = 'span', onDone }: EditableTextProps) {
   const [editing, setEditing] = useState(autoEdit)
   const [draft, setDraft] = useState(value)
@@ -75,13 +75,13 @@ export function EditableText({ value, placeholder, onChange, multiline = false, 
   return (
     <Tag
       className={`editable ${value ? '' : 'editable--empty'} ${className}`}
-      onClick={(e) => {
+      onDoubleClick={(e) => {
         e.stopPropagation()
+        window.getSelection()?.removeAllRanges()
         setDraft(value)
         setEditing(true)
       }}
-      onPointerDown={(e) => e.stopPropagation()}
-      title="click to edit"
+      title="double-click to edit"
     >
       {value ? (render ? render(value) : value) : placeholder}
     </Tag>

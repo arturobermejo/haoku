@@ -1,11 +1,11 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate'
-import { isLegacyDoc, migrateLegacy, parseDocument, serializeDocument, type LegacyDoc } from './markdown'
+import { isLegacyDoc, migrateLegacy, parseDocument, retireDoc, serializeDocument, type LegacyDoc } from './markdown'
 import type { SourcesApi } from './sources'
 import type { BlockMeta, Highlight, PracticeItem, PracticeProgress, Source, WorkspaceDoc } from './types'
 
 /**
  * A space export: `document.md` (the markdown, title first, footnotes renumbered), `space.json`
- * (metadata, highlights, quiz progress, sources) and every source file under `sources/`, plus the
+ * (metadata, highlights, the practice bank, sources) and every source file under `sources/`, plus the
  * `space-elements.js` bundle so the markdown is interactive outside haoku.
  */
 export const SPACE_FORMAT = 'haoku-space'
@@ -26,7 +26,8 @@ interface SpaceManifest {
   /** v2: path of the markdown document inside the zip. */
   document?: string
   highlights: Highlight[]
-  quizAnswers: Record<string, number>
+  /** Written by builds before questions moved out of the document; read, never written. */
+  quizAnswers?: Record<string, number>
   blockIds?: string[]
   blockMeta?: Record<string, BlockMeta>
   practice?: PracticeItem[]
@@ -54,7 +55,7 @@ const ELEMENT_FILES = ['space-elements.js', 'space-elements.css']
 export function exportMarkdown(doc: WorkspaceDoc, sources: SourcesApi): string {
   const parsed = parseDocument(doc.markdown, { ids: doc.blockIds })
   const md = serializeDocument(parsed.blocks, parsed.footnotes, { renumber: true, title: doc.title, sourceName: (id) => sources.byId(id)?.name ?? id })
-  return `${md}\n<!-- interactive blocks (space-quiz, space-flashcards, space-diagram, space-callout) need space-elements.js from haoku -->\n`
+  return `${md}\n<!-- interactive blocks (space-callout, space-diagram) need space-elements.js from haoku -->\n`
 }
 
 export async function exportSpace(doc: WorkspaceDoc, sources: SourcesApi): Promise<Blob> {
@@ -76,7 +77,7 @@ export async function exportSpace(doc: WorkspaceDoc, sources: SourcesApi): Promi
       // The bundle is a convenience; the export is complete without it.
     }
   }
-  const manifest: SpaceManifest = { format: SPACE_FORMAT, version: SPACE_VERSION, exportedAt: Date.now(), title: doc.title, document: 'document.md', highlights: doc.highlights, quizAnswers: doc.quizAnswers, blockIds: doc.blockIds, blockMeta: doc.blockMeta, practice: doc.practice ?? [], practiceProgress: doc.practiceProgress ?? {}, sources: exported }
+  const manifest: SpaceManifest = { format: SPACE_FORMAT, version: SPACE_VERSION, exportedAt: Date.now(), title: doc.title, document: 'document.md', highlights: doc.highlights, blockIds: doc.blockIds, blockMeta: doc.blockMeta, practice: doc.practice ?? [], practiceProgress: doc.practiceProgress ?? {}, sources: exported }
   files['space.json'] = strToU8(JSON.stringify(manifest, null, 2))
   // Source files are already compressed (PDF, images); only the text is worth deflating.
   const zipped = zipSync(files, { level: 0 })
@@ -120,9 +121,9 @@ export async function importSpace(file: File, sources: SourcesApi): Promise<Impo
     const md = strFromU8(entries[manifest.document]).replace(/\n<!--[^]*?-->\n?$/, '')
     const parsed = parseDocument(md, { extractTitle: true, ids: manifest.blockIds })
     const markdown = remapSourceIds(serializeDocument(parsed.blocks, parsed.footnotes, { sourceName: nameOf }), map)
-    doc = { version: 2, title: manifest.title || parsed.title || 'Imported space', markdown, highlights: manifest.highlights ?? [], quizAnswers: manifest.quizAnswers ?? {}, blockIds: parsed.blocks.map((b) => b.id), blockMeta: manifest.blockMeta ?? {}, practice: (manifest.practice ?? []).map((it) => (it.citation ? { ...it, citation: { ...it.citation, sourceId: map.get(it.citation.sourceId) ?? it.citation.sourceId } } : it)), practiceProgress: manifest.practiceProgress ?? {} }
+    doc = retireDoc({ version: 2, title: manifest.title || parsed.title || 'Imported space', markdown, highlights: manifest.highlights ?? [], blockIds: parsed.blocks.map((b) => b.id), blockMeta: manifest.blockMeta ?? {}, practice: (manifest.practice ?? []).map((it) => (it.citation ? { ...it, citation: { ...it.citation, sourceId: map.get(it.citation.sourceId) ?? it.citation.sourceId } } : it)), practiceProgress: manifest.practiceProgress ?? {} })
   } else if (isLegacyDoc({ blocks: manifest.blocks })) {
-    const legacy = migrateLegacy({ title: manifest.title ?? 'Imported space', blocks: manifest.blocks ?? [], highlights: manifest.highlights, quizAnswers: manifest.quizAnswers }, nameOf)
+    const legacy = migrateLegacy({ title: manifest.title ?? 'Imported space', blocks: manifest.blocks ?? [], highlights: manifest.highlights }, nameOf)
     doc = { ...legacy, markdown: remapSourceIds(legacy.markdown, map) }
   } else throw new Error('not a haoku space: no document inside')
   doc.highlights = doc.highlights.map((h) => ({ ...h, sourceId: map.get(h.sourceId) ?? h.sourceId }))

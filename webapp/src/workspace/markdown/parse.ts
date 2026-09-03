@@ -3,8 +3,8 @@ import type { Citation } from '../types'
 import { citationKeysIn, citesAttr, isFootnoteLine, keysInData, parseFootnote } from './citations'
 import { CALLOUT_TONES, isElementKind, type BlockData, type CalloutTone, type ParsedBlock, type ParsedDocument } from './types'
 
-const ELEMENT_OPEN = /^<space-(callout|diagram|flashcards|quiz)\b([^>]*)>\s*$/
-const ELEMENT_CLOSE = /^<\/space-(callout|diagram|flashcards|quiz)>\s*$/
+const ELEMENT_OPEN = /^<space-(callout|diagram)\b([^>]*)>\s*$/
+const ELEMENT_CLOSE = /^<\/space-(callout|diagram)>\s*$/
 const FENCE = /^(```|~~~)/
 const HEADING = /^(#{1,3})\s+(.*?)\s*#*\s*$/
 const IMAGE = /^!\[((?:[^[\]]|\[[^\]]*\])*)\]\(space:\/\/([^\s)]+)\)\s*$/
@@ -118,19 +118,6 @@ function classify(raw: string): BlockData {
         .map((e) => ({ from: num(e?.from), to: num(e?.to), ...(str(e?.label) ? { label: str(e?.label) } : {}) }))
         .filter((e) => e.from >= 0 && e.to >= 0 && e.from < nodes.length && e.to < nodes.length)
       return { kind: 'diagram', title: attrs.title ?? '', nodes, edges, cites }
-    }
-    if (open[1] === 'flashcards' && json) {
-      const cards = arr(json.cards).map((c) => ({ question: str(c?.question), answer: str(c?.answer), ...(str(c?.cite) ? { cite: str(c?.cite) } : {}) }))
-      return { kind: 'flashcards', cards, cites }
-    }
-    if (open[1] === 'quiz' && json) {
-      const questions = arr(json.questions).map((q) => ({
-        prompt: str(q?.prompt),
-        options: arr(q?.options).map((o) => str(o)),
-        answer: Math.max(0, num(q?.answer)),
-        ...(str(q?.explanation) ? { explanation: str(q?.explanation) } : {}),
-      }))
-      return { kind: 'quiz', questions, cites }
     }
     return { kind: 'paragraph', markdown: raw }
   }

@@ -93,9 +93,7 @@ function PrintBody({ block, imageUrl }: { block: ParsedBlock; imageUrl: (id: str
     }
     case 'callout':
     case 'diagram':
-    case 'flashcards':
-    case 'quiz':
-      return <ElementBlock block={block} data={d} print />
+      return <ElementBlock data={d} print />
     default:
       return <div className={`print-md print-md--${d.kind}${d.kind === 'heading' ? ` print-heading-${d.level}` : ''}`} dangerouslySetInnerHTML={{ __html: renderBlockHtml(block) }} />
   }
