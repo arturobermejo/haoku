@@ -33,7 +33,7 @@ Haoku has no chat box. It exposes its own UI as **tools over [WebMCP](https://gi
 and the agent you already use in your browser drives it: it reads your sources, writes into the
 sheet, opens a PDF at the page it is talking about, and adds practice questions.
 
-On load the app registers 19 tools on `document.modelContext` (falling back to the deprecated
+On load the app registers 20 tools on `document.modelContext` (falling back to the deprecated
 `navigator.modelContext`), and the `webmcp` chip in the top bar turns on with the count. WebMCP
 needs a secure context, so HTTPS or localhost.
 
@@ -42,7 +42,7 @@ The full reference, with what each tool returns, is in [webmcp.md](webmcp.md).
 | | tools |
 |---|---|
 | Sources | `list_sources`, `search_sources`, `read_source`, `open_source`, `highlight_source` |
-| The sheet | `get_workspace`, `add_block`, `update_block`, `remove_block`, `move_block`, `focus_block`, `link_sources` |
+| The sheet | `get_workspace`, `set_title`, `add_block`, `update_block`, `remove_block`, `move_block`, `focus_block`, `link_sources` |
 | The user | `get_selection` — the selected block, the text under the cursor, the open source · `list_context` — the gathered passages, free ones apart from the ones the document already cites |
 | Practice | `add_practice`, `list_practice`, `remove_practice` |
 | History | `undo`, `redo` |

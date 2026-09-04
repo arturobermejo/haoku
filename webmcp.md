@@ -16,7 +16,7 @@ input, and the function that runs it. For example:
 document.modelContext.registerTool({ name: "search_products", description: "Search the product catalog", inputSchema: { /* ... */ } execute: async (input) => { /* ... */ } });
 ```
 
-Haoku registers nineteen of them, and none of them talk to a server. This is one of ours:
+Haoku registers twenty of them, and none of them talk to a server. This is one of ours:
 
 ```ts
 document.modelContext.registerTool({
@@ -162,6 +162,15 @@ holds the document as one markdown string.
   "footnotes": [ { "key": "1", "source_id": "s_ae180ca4", "source": "…pdf", "page": 1, "quote": "…" } ],
   "sections": [ { "heading_id": "b_59efbe38", "title": "Why a context window is not memory", "blocks": 2, "status": "done" } ],
   "selected_block_id": "b_98c8789b" }
+```
+
+### `set_title`
+`{ title }` — renames the space: the name in the top bar, the title of the printed document and the
+file name of an export. The user can undo it.
+
+```json
+{ "summary": "The space is now called “Memory in AI agents” (was “Untitled space”).",
+  "title": "Memory in AI agents", "previous_title": "Untitled space" }
 ```
 
 ### `add_block`
