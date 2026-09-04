@@ -470,6 +470,21 @@ export const TOOLS: ToolDef[] = [
     },
   },
   {
+    name: 'set_title',
+    title: 'Name the space',
+    description: 'Renames the space: the name in the top bar, the title of the printed document and the file name of an export. Short and about the subject, the way a chapter is named — the user can undo it.',
+    inputSchema: { type: 'object', properties: { title: { type: 'string', description: 'The new name, e.g. "Memory in AI agents".' } }, required: ['title'] },
+    execute: async (input, ctx) => {
+      const title = str(input, 'title')?.trim()
+      if (!title) return fail('"title" is required.', 'A short name for the space, e.g. "Memory in AI agents".')
+      if (title.length > 120) return fail('That name is too long.', 'Keep it under 120 characters; it has to fit in the top bar.')
+      const before = ctx.ws.getState().title
+      if (title === before) return { ok: true, summary: `The space is already called “${title}”.`, title }
+      ctx.ws.setTitle(title)
+      return { ok: true, summary: `The space is now called “${title}” (was “${before}”).`, title, previous_title: before }
+    },
+  },
+  {
     name: 'add_block',
     title: 'Add a block to the document',
     description: `Adds a block and shows it at once. Either give "type" and "content" — ${Object.entries(CONTENT_SHAPES)
