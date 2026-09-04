@@ -98,6 +98,17 @@ The other scripts:
 | `npm run preview` | serve the production build |
 | `npm run deploy` | build and publish to Cloudflare Workers |
 
+## Analytics
+
+None by default. `startAnalytics()` loads Google Analytics only when a measurement id is present at
+build time and the app is not on localhost:
+
+```bash
+VITE_GA_ID=G-XXXXXXXXXX npm run build
+```
+
+It reports the page view and nothing else. The sources and the document never leave the browser.
+
 ## Exporting
 
 - **`.md`** — the document with its footnotes renumbered. Interactive blocks keep working in any
