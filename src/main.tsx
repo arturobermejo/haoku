@@ -13,7 +13,10 @@ import '@fontsource/jetbrains-mono/latin-500.css'
 
 import './pdf/worker'
 import './styles/global.css'
+import { startAnalytics } from './analytics'
 import App from './App.tsx'
+
+startAnalytics()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
