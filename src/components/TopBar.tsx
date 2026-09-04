@@ -5,6 +5,7 @@ import { downloadBlob, exportMarkdown, exportSpace, fileSlug, importSpace } from
 import { useSources } from '../workspace/sources'
 import { useWorkspace } from '../workspace/store'
 import { ConfirmDialog } from './ConfirmDialog'
+import { HelpDialog } from './HelpDialog'
 import { EditableText } from './EditableText'
 import { PrintView } from './PrintView'
 import './TopBar.css'
@@ -24,6 +25,7 @@ export function TopBar({ mode, onMode, showSources, showContext, onToggleSources
   const { sources } = sourcesApi
   const webmcp = useSyncExternalStore(subscribeStatus, getStatus)
   const [menu, setMenu] = useState(false)
+  const [help, setHelp] = useState(false)
   const [printing, setPrinting] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -180,6 +182,7 @@ export function TopBar({ mode, onMode, showSources, showContext, onToggleSources
         )}
         <input ref={importRef} type="file" accept=".zip,application/zip" onChange={onImport} hidden />
       </div>
+      {help && <HelpDialog onClose={() => setHelp(false)} />}
       {printing && <PrintView onDone={() => setPrinting(false)} />}
       {pending?.kind === 'import' && (
         <ConfirmDialog
@@ -206,6 +209,9 @@ export function TopBar({ mode, onMode, showSources, showContext, onToggleSources
       </button>
       <button type="button" className={`control${showContext ? '' : ' is-off'}`} onClick={onToggleContext} aria-pressed={showContext} disabled={ws.viewer !== null}>
         context
+      </button>
+      <button type="button" className="control topbar-help" onClick={() => setHelp(true)} title="how Haoku works" aria-label="help">
+        ?
       </button>
     </header>
   )
